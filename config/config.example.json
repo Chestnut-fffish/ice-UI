@@ -1,0 +1,53 @@
+{
+    "version": "1.0.0",
+    "auth": {
+        "username": "",
+        "password": "",
+        "remember_password": false
+    },
+    "settings": {
+        "theme": "light",
+        "only_show_text_assets": false,
+        "render_defaults": {
+            "filename_template": "{文字组 1}_{模板名}_{时间}",
+            "format": "jpg",
+            "tiling": {
+                "enabled": false,
+                "width": 1920,
+                "height": 1080
+            }
+        },
+        "rapid_export": {
+            "copy_after_render": false,
+            "export_path": "./output",
+            "ignore_header": true,
+            "clipboard_monitor": false
+        }
+    },
+    "text_replacement_presets": [
+        {
+            "name": "前面加@",
+            "find": "^",
+            "replace": "@",
+            "can_remove": false
+        },
+        {
+            "name": "用|隔开每个字符",
+            "find": "(.)(?=.)",
+            "replace": "$1|",
+            "can_remove": false
+        },
+        {
+            "name": "取第一个字",
+            "find": "^(.).*",
+            "replace": "$1",
+            "can_remove": false
+        },
+        {
+            "name": "每三个数字加-",
+            "find": "(\\d)(?=(\\d{3})+(?!\\d))",
+            "replace": "$1-",
+            "can_remove": false
+        }
+    ]
+}

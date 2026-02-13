@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ice UI - Integrated Workbench</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* =========================================
+           1. 核心变量 (Ice UI Standard)
+           ========================================= */
+        :root {
+            /* 品牌色 */
+            --ice-primary: #06b6d4;
+            --ice-primary-light: #22d3ee;
+            --ice-primary-dark: #0891b2;
+            
+            /* 状态色 */
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-blue: #3b82f6;
+
+            /* 背景与边框 */
+            --bg-body: #0e7490;      /* 演示背景色 */
+            --bg-sidebar: #F8FAFC;   /* 侧边栏背景 */
+            --bg-app: #F1F5F9;       /* 右侧工作区底色 */
+            --bg-white: #ffffff;
+            
+            /* 文字 */
+            --text-main: #334155;
+            --text-sub: #64748b;
+            --border: #e2e8f0;
+
+            /* 圆角与阴影 */
+            --radius-main: 24px;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            
+            --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-body);
+            height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            user-select: none;
+        }
+
+        .scroll-hide::-webkit-scrollbar { display: none; }
+        .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* =========================================
+           2. 主窗口容器
+           ========================================= */
+        .app-window {
+            width: 900px; /* 稍微加宽一点以容纳侧边栏 */
+            height: 600px;
+            background-color: var(--bg-app);
+            border-radius: var(--radius-main);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* =========================================
+           3. 左侧分体式 Dock (Sidebar)
+           ========================================= */
+        .sidebar {
+            width: 72px;
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 24px 0;
+            align-items: center;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+
+        .dock-group { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+        /* 侧边栏导航按钮 */
+        .nav-btn {
+            width: 42px; height: 42px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--ice-primary);
+            background-color: #ecfeff;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            font-size: 18px;
+        }
+        .nav-btn:hover { transform: scale(1.05); background-color: #cffafe; }
+        
+        .nav-btn.active {
+            background: linear-gradient(135deg, var(--ice-primary) 0%, var(--ice-primary-dark) 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
+        }
+
+        /* 侧边栏 Tooltip */
+        .nav-tooltip {
+            position: absolute; left: 56px; top: 50%; transform: translateY(-50%);
+            background: linear-gradient(to right, #a5f3fc, #67e8f9);
+            color: #0e7490; font-size: 12px; font-weight: 600;
+            padding: 6px 12px; border-radius: 8px; white-space: nowrap;
+            pointer-events: none; opacity: 0; transition: opacity 0.2s, left 0.2s; z-index: 30;
+        }
+        .nav-tooltip::before {
+            content: ""; position: absolute; left: -4px; top: 50%; transform: translateY(-50%);
+            border-width: 5px 5px 5px 0; border-style: solid; border-color: transparent #a5f3fc transparent transparent;
+        }
+        .nav-btn:hover .nav-tooltip { opacity: 1; left: 60px; }
+
+        /* 底部元素 */
+        .status-dot {
+            width: 8px; height: 8px; background-color: #10b981; border-radius: 50%;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); margin-bottom: 4px;
+        }
+        
+        .app-logo {
+            width: 42px; height: 42px; border-radius: 14px;
+            background: linear-gradient(135deg, #22d3ee 0%, #0891b2 100%);
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 20px; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.25);
+            margin-top: 8px;
+        }
+
+        /* =========================================
+           4. 右侧主要内容区 (Main Content)
+           ========================================= */
+        .main-content {
+            flex-grow: 1;
+            display: flex; flex-direction: column;
+            background-color: var(--bg-app);
+            position: relative; /* 为悬浮岛定位 */
+        }
+
+        /* 顶栏 (精简版) */
+        .top-bar {
+            height: 60px; padding: 0 24px;
+            display: flex; align-items: center;
+            flex-shrink: 0;
+        }
+        
+        .doc-selector {
+            background: var(--bg-white);
+            padding: 6px 16px; border-radius: 20px;
+            border: 1px solid transparent;
+            display: flex; align-items: center; gap: 8px;
+            cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+        .doc-selector:hover { border-color: var(--ice-primary); transform: translateY(-1px); }
+        .doc-name { font-size: 13px; font-weight: 500; color: var(--text-main); }
+
+        /* 工作区布局 */
+        .workspace {
+            display: flex; gap: 16px;
+            padding: 0 24px 24px 24px;
+            height: calc(100% - 60px);
+        }
+
+        /* --- 左面板 (资产树) --- */
+        .left-panel {
+            width: 200px;
+            background: var(--bg-white);
+            border-radius: 20px;
+            padding: 12px;
+            display: flex; flex-direction: column;
+            box-shadow: var(--shadow-card);
+        }
+
+        .search-box {
+            background: #f8fafc; border-radius: 8px; padding: 8px 10px;
+            font-size: 12px; color: var(--text-sub); margin-bottom: 8px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        
+        .layer-tree { overflow-y: auto; flex-grow: 1; padding-right: 2px; }
+        
+        .layer-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px; border-radius: 8px; cursor: pointer;
+            font-size: 12px; color: var(--text-main); transition: background 0.1s;
+        }
+        .layer-item:hover { background-color: #ecfeff; }
+        
+        .layer-info { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+        .icon-text { color: var(--text-blue); font-weight: bold; font-family: serif; }
+        .icon-smart { color: #8b5cf6; }
+        .icon-warn { color: var(--warning); font-size: 10px; }
+        
+        .btn-add-layer {
+            width: 20px; height: 20px; border-radius: 50%;
+            background: var(--ice-primary); color: white;
+            display: flex; align-items: center; justify-content: center; font-size: 10px;
+            opacity: 0; transform: scale(0.5); transition: all 0.2s;
+        }
+        .layer-item:hover .btn-add-layer { opacity: 1; transform: scale(1); }
+        .indent-1 { padding-left: 20px; }
+
+        /* --- 右面板 (配置区) --- */
+        .right-panel {
+            flex-grow: 1;
+            background: var(--bg-white);
+            border-radius: 20px;
+            box-shadow: var(--shadow-card);
+            padding: 16px 20px 80px 20px; /* 底部留白 */
+            overflow-y: auto;
+        }
+
+        .section-header {
+            font-size: 11px; font-weight: 700; color: var(--text-sub);
+            margin: 20px 0 10px 0; text-transform: uppercase; letter-spacing: 0.5px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .section-header:first-child { margin-top: 0; }
+
+        .config-card {
+            background: #f8fafc; border: 1px solid var(--border);
+            border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
+        }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: center; height: 24px; }
+        .card-left { display: flex; align-items: center; gap: 8px; }
+        
+        .tag-type { font-size: 9px; font-weight: 800; padding: 2px 5px; border-radius: 4px; text-transform: uppercase; }
+        .tag-text { color: var(--text-blue); background: #eff6ff; border: 1px solid #dbeafe; }
+        .tag-img { color: #8b5cf6; background: #f5f3ff; border: 1px solid #ede9fe; }
+        
+        .card-title { font-size: 12px; font-weight: 600; color: #334155; }
+        
+        .mapping-select {
+            font-size: 11px; padding: 2px 8px; border-radius: 6px; height: 24px;
+            border: 1px solid var(--border); color: #475569; background: white; outline: none;
+        }
+        .mapping-select:hover { border-color: var(--ice-primary); }
+        
+        .btn-icon { color: #94a3b8; cursor: pointer; transition: color 0.2s; font-size: 12px; margin-left: 8px; }
+        .btn-icon:hover { color: var(--danger); }
+        .btn-add-rx { color: var(--ice-primary); font-size: 10px; font-weight: 600; margin-left: 4px; cursor: pointer; }
+
+        /* 正则列表 (简易) */
+        .regex-item {
+            margin-top: 8px; display: flex; align-items: center; justify-content: space-between;
+            background: white; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);
+            font-family: monospace; font-size: 11px; color: #475569;
+        }
+
+        /* =========================================
+           5. 悬浮操作岛 (Floating Dock)
+           ========================================= */
+        .float-dock {
+            position: absolute;
+            bottom: 24px;
+            /* 居中定位：相对于 main-content */
+            left: 50%; transform: translateX(-50%);
+            
+            background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px);
+            padding: 6px 12px; border-radius: 24px;
+            box-shadow: var(--shadow-float);
+            border: 1px solid rgba(255,255,255,0.6);
+            display: flex; gap: 8px; align-items: center;
+            z-index: 10;
+        }
+
+        .dock-sep { width: 1px; height: 20px; background: #e2e8f0; margin: 0 4px; }
+        
+        .float-btn {
+            width: 36px; height: 36px; border-radius: 12px; border: none;
+            background: transparent; color: #64748b; font-size: 16px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; position: relative;
+        }
+        .float-btn:hover { background: #f1f5f9; color: var(--ice-primary); transform: translateY(-2px); }
+        
+        .float-btn.primary {
+            background: linear-gradient(135deg, var(--ice-primary) 0%, var(--ice-primary-dark) 100%);
+            color: white; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+        }
+        .float-btn.primary:hover { box-shadow: 0 6px 16px rgba(6, 182, 212, 0.4); }
+
+        /* 悬浮岛 Tooltip */
+        .float-btn::after {
+            content: attr(data-tip);
+            position: absolute; bottom: 115%; left: 50%; transform: translateX(-50%) translateY(5px);
+            background: #1e293b; color: white; padding: 4px 8px; font-size: 10px;
+            border-radius: 4px; opacity: 0; pointer-events: none; white-space: nowrap;
+            transition: all 0.15s;
+        }
+        .float-btn:hover::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    </style>
+</head>
+<body>
+
+    <div class="app-window">
+        
+        <!-- 1. 左侧分体式侧边栏 -->
+        <nav class="sidebar">
+            <!-- 上半部：核心功能 -->
+            <div class="dock-group">
+                <div class="nav-btn active">
+                    <i class="fa-solid fa-border-all"></i>
+                    <div class="nav-tooltip">制作模板</div>
+                </div>
+                <div class="nav-btn">
+                    <i class="fa-solid fa-bolt"></i>
+                    <div class="nav-tooltip">工作流</div>
+                </div>
+                <div class="nav-btn">
+                    <i class="fa-solid fa-list-ul"></i>
+                    <div class="nav-tooltip">任务列表</div>
+                </div>
+                <div class="nav-btn">
+                    <i class="fa-regular fa-clock"></i>
+                    <div class="nav-tooltip">历史记录</div>
+                </div>
+            </div>
+
+            <!-- 下半部：系统 -->
+            <div class="dock-group">
+                <div class="status-dot" title="系统在线"></div>
+                
+                <div class="nav-btn" style="background:transparent; color:#94a3b8; font-size:16px;">
+                    <i class="fa-solid fa-circle-info"></i>
+                </div>
+
+                <div class="app-logo">
+                    <i class="fa-solid fa-cube"></i>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 2. 右侧主内容区 -->
+        <main class="main-content">
+            
+            <!-- 顶栏：文档选择 -->
+            <header class="top-bar">
+                <div class="doc-selector">
+                    <i class="fa-regular fa-file-image" style="color:var(--ice-primary)"></i>
+                    <span class="doc-name">Promotion_Banner_2026.psd</span>
+                    <i class="fa-solid fa-chevron-down" style="font-size:10px; color:#cbd5e1"></i>
+                </div>
+            </header>
+
+            <!-- 工作台：资产 + 配置 -->
+            <div class="workspace">
+                
+                <!-- 资产树 (200px) -->
+                <aside class="left-panel">
+                    <div class="search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i> <span>搜索图层...</span>
+                    </div>
+                    
+                    <div class="layer-tree scroll-hide">
+                        <div class="layer-item">
+                            <div class="layer-info">
+                                <i class="fa-regular fa-folder" style="color:#94a3b8"></i>
+                                <span>Header_Group</span>
+                            </div>
+                        </div>
+                        
+                        <div class="layer-item indent-1">
+                            <div class="layer-info">
+                                <i class="fa-solid fa-font icon-text"></i>
+                                <span>Main_Headline</span>
+                            </div>
+                            <div class="btn-add-layer"><i class="fa-solid fa-plus"></i></div>
+                        </div>
+
+                        <div class="layer-item indent-1">
+                            <div class="layer-info">
+                                <i class="fa-solid fa-font icon-text" style="color:#94a3b8"></i>
+                                <span style="color:#94a3b8">Sub_Caption</span>
+                                <i class="fa-solid fa-triangle-exclamation icon-warn"></i>
+                            </div>
+                            <div class="btn-add-layer"><i class="fa-solid fa-plus"></i></div>
+                        </div>
+
+                        <div class="layer-item">
+                            <div class="layer-info">
+                                <i class="fa-regular fa-folder" style="color:#94a3b8"></i>
+                                <span>Product_View</span>
+                            </div>
+                        </div>
+
+                        <div class="layer-item indent-1">
+                            <div class="layer-info">
+                                <i class="fa-regular fa-file-image icon-smart"></i>
+                                <span>Device_Mockup</span>
+                            </div>
+                            <div class="btn-add-layer"><i class="fa-solid fa-plus"></i></div>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- 配置面板 (Auto Width) -->
+                <section class="right-panel scroll-hide">
+                    
+                    <!-- 文字配置 -->
+                    <div class="section-header">
+                        <i class="fa-solid fa-pen-nib"></i> Text Strategy
+                    </div>
+
+                    <div class="config-card">
+                        <div class="card-header">
+                            <div class="card-left">
+                                <span class="tag-type tag-text">T</span>
+                                <span class="card-title">Main_Headline</span>
+                            </div>
+                            <div class="card-left">
+                                <span class="btn-add-rx">Rx+</span>
+                                <select class="mapping-select">
+                                    <option>A: Headline</option>
+                                </select>
+                                <i class="fa-solid fa-trash btn-icon"></i>
+                            </div>
+                        </div>
+                        <div class="regex-item">
+                            <span>s/\s+//g</span>
+                            <i class="fa-solid fa-xmark" style="font-size:10px; cursor:pointer; color:#cbd5e1"></i>
+                        </div>
+                    </div>
+
+                    <!-- 图片配置 -->
+                    <div class="section-header">
+                        <i class="fa-solid fa-image"></i> Image Strategy
+                    </div>
+
+                    <div class="config-card">
+                        <div class="card-header">
+                            <div class="card-left">
+                                <span class="tag-type tag-img">IMG</span>
+                                <span class="card-title">Device_Mockup</span>
+                            </div>
+                            <div class="card-left">
+                                <select class="mapping-select">
+                                    <option>B: Screenshot</option>
+                                </select>
+                                <i class="fa-solid fa-trash btn-icon"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 留白 -->
+                    <div style="height: 40px;"></div>
+
+                </section>
+            </div>
+
+            <!-- 悬浮操作岛 -->
+            <div class="float-dock">
+                <button class="float-btn" data-tip="重置">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+                <div class="dock-sep"></div>
+                <button class="float-btn" data-tip="添加图层滤镜">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </button>
+                <button class="float-btn" data-tip="添加全局滤镜">
+                    <i class="fa-solid fa-sliders"></i>
+                </button>
+                <button class="float-btn" data-tip="渲染设置">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+                <div class="dock-sep"></div>
+                <button class="float-btn" style="color:var(--ice-primary)" data-tip="预览">
+                    <i class="fa-regular fa-eye"></i>
+                </button>
+                <button class="float-btn primary" data-tip="保存模板">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                </button>
+            </div>
+
+        </main>
+    </div>
+
+</body>
+</html>

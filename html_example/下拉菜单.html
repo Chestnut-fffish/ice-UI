@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ice UI - Liquid Dropdown</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* =========================================
+           CSS 变量
+           ========================================= */
+        :root {
+            --ice-primary: #06b6d4;
+            --ice-primary-light: #ecfeff;
+            --text-main: #334155;
+            --text-sub: #64748b;
+            --bg-body: #f1f5f9;
+            --shadow-glow: 0 4px 12px rgba(6, 182, 212, 0.25);
+            --shadow-drop: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            background-color: var(--bg-body);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* =========================================
+           Dropdown 容器
+           ========================================= */
+        .ice-dropdown {
+            position: relative;
+            width: 240px;
+            font-size: 13px;
+            user-select: none;
+        }
+
+        /* 1. 触发按钮 (Trigger) */
+        .dropdown-trigger {
+            width: 100%;
+            padding: 10px 16px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--text-main);
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            transition: all 0.2s;
+            position: relative;
+            z-index: 20; /* 保证在菜单之上 */
+        }
+
+        .dropdown-trigger:hover, 
+        .ice-dropdown.active .dropdown-trigger {
+            border-color: var(--ice-primary);
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+        }
+
+        .trigger-arrow {
+            font-size: 10px;
+            color: #94a3b8;
+            transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .ice-dropdown.active .trigger-arrow {
+            transform: rotate(180deg);
+            color: var(--ice-primary);
+        }
+
+        /* =========================================
+           2. 下拉菜单 (The Menu) - 液滴动画核心
+           ========================================= */
+        .dropdown-menu {
+            position: absolute;
+            top: 100%; /* 紧贴按钮底部 */
+            left: 0;
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            box-shadow: var(--shadow-drop);
+            border: 1px solid rgba(255,255,255,0.6);
+            
+            /* 初始状态：隐藏，缩小，像一个小液滴 */
+            opacity: 0;
+            visibility: hidden;
+            transform-origin: top center;
+            transform: scale(0.8) translateY(-10px); 
+            
+            /* 动画过渡 */
+            transition: 
+                opacity 0.2s ease,
+                transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), /* Bouncy Effect */
+                visibility 0.2s;
+            z-index: 10;
+        }
+
+        /* 激活状态：展开 */
+        .ice-dropdown.active .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1) translateY(0);
+        }
+
+        /* 液滴引线 (Connector) - 视觉魔法
+           模拟从按钮滴下来的连接处 */
+        .dropdown-menu::before {
+            content: "";
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 12px;
+            background: white;
+            border-radius: 2px;
+            transform: translateX(-50%) rotate(45deg); /* 菱形 */
+            z-index: -1;
+            box-shadow: -2px -2px 5px rgba(0,0,0,0.02); /* 轻微阴影融合 */
+            transition: top 0.3s;
+        }
+
+        /* =========================================
+           3. 选项列表 (Scroll Area)
+           ========================================= */
+        .menu-options {
+            max-height: 200px;
+            overflow-y: auto;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #e2e8f0;
+            margin-bottom: 8px;
+        }
+        
+        /* 隐藏滚动条 */
+        .menu-options::-webkit-scrollbar { width: 4px; }
+        .menu-options::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+
+        /* 独立单元格 (Independent Items) */
+        .menu-item {
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            border-radius: 8px;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .menu-item:hover {
+            background-color: var(--ice-primary-light);
+            color: var(--ice-primary);
+            padding-left: 16px; /* 轻微位移 */
+        }
+
+        .menu-item i {
+            font-size: 12px;
+            color: #cbd5e1;
+            transition: color 0.2s;
+        }
+        .menu-item:hover i { color: var(--ice-primary); }
+
+        /* 选中状态 */
+        .menu-item.selected {
+            background-color: var(--ice-primary);
+            color: white;
+            box-shadow: 0 4px 10px rgba(6, 182, 212, 0.3);
+        }
+        .menu-item.selected i { color: rgba(255,255,255,0.8); }
+
+        /* =========================================
+           4. 底部新增按钮 (New Action)
+           ========================================= */
+        .menu-footer {
+            padding: 0 4px;
+        }
+
+        .add-btn {
+            width: 100%;
+            padding: 10px;
+            border: 1px dashed #94a3b8;
+            border-radius: 10px;
+            background: transparent;
+            color: #64748b;
+            font-weight: 500;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .add-btn:hover {
+            border-color: var(--ice-primary);
+            background: rgba(6, 182, 212, 0.05);
+            color: var(--ice-primary);
+        }
+
+        .add-icon-circle {
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: #cbd5e1;
+            color: white;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .add-btn:hover .add-icon-circle {
+            background: var(--ice-primary);
+            transform: rotate(90deg); /* 旋转动画 */
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 组件 HTML 结构 -->
+    <div class="ice-dropdown" id="myDropdown">
+        
+        <!-- 1. 触发器 -->
+        <div class="dropdown-trigger" onclick="toggleDropdown()">
+            <span class="selected-text">选择映射列...</span>
+            <i class="fa-solid fa-chevron-down trigger-arrow"></i>
+        </div>
+
+        <!-- 2. 液滴菜单 -->
+        <div class="dropdown-menu">
+            
+            <!-- 滚动选项区 -->
+            <div class="menu-options">
+                
+                <div class="menu-item selected" onclick="selectItem(this, 'Col A: 产品名称')">
+                    <i class="fa-solid fa-table-columns"></i>
+                    <span>Col A: 产品名称</span>
+                </div>
+                
+                <div class="menu-item" onclick="selectItem(this, 'Col B: 价格 (USD)')">
+                    <i class="fa-solid fa-tag"></i>
+                    <span>Col B: 价格 (USD)</span>
+                </div>
+
+                <div class="menu-item" onclick="selectItem(this, 'Col C: 图片路径')">
+                    <i class="fa-regular fa-image"></i>
+                    <span>Col C: 图片路径</span>
+                </div>
+
+                <div class="menu-item" onclick="selectItem(this, 'Col D: 促销文案')">
+                    <i class="fa-solid fa-align-left"></i>
+                    <span>Col D: 促销文案</span>
+                </div>
+                
+                <div class="menu-item" onclick="selectItem(this, 'Col E: SKU 编码')">
+                    <i class="fa-solid fa-barcode"></i>
+                    <span>Col E: SKU 编码</span>
+                </div>
+
+            </div>
+
+            <!-- 底部新增区 -->
+            <div class="menu-footer">
+                <div class="add-btn" onclick="addNewItem()">
+                    <div class="add-icon-circle"><i class="fa-solid fa-plus"></i></div>
+                    <span>新建变量列</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // 简单的交互逻辑用于演示
+        const dropdown = document.getElementById('myDropdown');
+        const triggerText = dropdown.querySelector('.selected-text');
+
+        function toggleDropdown() {
+            dropdown.classList.toggle('active');
+        }
+
+        function selectItem(element, text) {
+            // 移除其他选中状态
+            const items = dropdown.querySelectorAll('.menu-item');
+            items.forEach(item => item.classList.remove('selected'));
+            
+            // 选中当前
+            element.classList.add('selected');
+            
+            // 更新文字
+            triggerText.textContent = text;
+            triggerText.style.color = '#334155';
+            
+            // 关闭菜单
+            setTimeout(() => {
+                dropdown.classList.remove('active');
+            }, 150);
+        }
+
+        function addNewItem() {
+            alert("触发新建逻辑");
+        }
+
+        // 点击外部关闭
+        document.addEventListener('click', (e) => {
+            if (!dropdown.contains(e.target)) {
+                dropdown.classList.remove('active');
+            }
+        });
+    </script>

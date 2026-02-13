@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ice UI - Regex Designer Modal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* =========================================
+           1. CSS 变量 (Ice UI Standard)
+           ========================================= */
+        :root {
+            --ice-primary: #06b6d4;
+            --ice-primary-dark: #0891b2;
+            --ice-primary-light: #22d3ee;
+            --text-blue: #3b82f6;
+            
+            --bg-body: #0f172a;          /* 演示背景 */
+            --bg-sidebar: #F8FAFC;
+            --bg-white: #ffffff;
+            --bg-app: #F1F5F9;
+
+            --text-main: #334155;
+            --text-sub: #64748b;
+            --border: #e2e8f0;
+
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-main: 24px; /* 主窗口圆角 */
+
+            --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-body); 
+            height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-main);
+        }
+
+        /* 隐藏滚动条 */
+        .scroll-hide::-webkit-scrollbar { display: none; }
+
+        /* =========================================
+           2. 主窗口容器 (960x720)
+           ========================================= */
+        .app-window {
+            width: 960px;
+            height: 720px;
+            background-color: var(--bg-app);
+            border-radius: var(--radius-main);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            display: flex;
+            overflow: hidden;
+            position: relative; /* 为弹窗定位 */
+        }
+
+        /* =========================================
+           3. 侧边栏 (Split Dock)
+           ========================================= */
+        .sidebar {
+            width: 72px;
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid #e2e8f0;
+            display: flex; flex-direction: column;
+            justify-content: space-between;
+            padding: 24px 0;
+            align-items: center;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .dock-top, .dock-bottom { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+        .nav-btn {
+            width: 42px; height: 42px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--ice-primary);
+            background-color: #ecfeff;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+        }
+        .nav-btn:hover { transform: scale(1.05); background-color: #cffafe; }
+        .nav-btn.active {
+            background: linear-gradient(135deg, var(--ice-primary) 0%, var(--ice-primary-dark) 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
+        }
+
+        .app-logo {
+            width: 42px; height: 42px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #22d3ee 0%, #0891b2 100%);
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 20px;
+            box-shadow: 0 4px 12px rgba(6, 182, 212, 0.25);
+        }
+
+        /* =========================================
+           4. 主内容区 (Workspace)
+           ========================================= */
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-app);
+        }
+
+        /* 简化的 Top Bar */
+        .top-bar {
+            height: 60px; padding: 0 24px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .doc-selector {
+            background: white; padding: 6px 16px; border-radius: 20px;
+            border: 1px solid transparent; display: flex; align-items: center; gap: 8px;
+            font-size: 13px; color: var(--text-sub);
+        }
+
+        /* 简化的工作区布局 (作为背景) */
+        .workspace-bg {
+            display: flex; padding: 0 24px 24px; gap: 16px; height: calc(100% - 60px);
+        }
+        .panel-bg {
+            background: white; border-radius: 20px; padding: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
+
+        /* =========================================
+           5. 模态窗口 (Modal Overlay)
+           ========================================= */
+        .modal-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.4); /* 深色半透明遮罩 */
+            backdrop-filter: blur(4px); /* 毛玻璃 */
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .modal-box {
+            width: 640px;
+            background: #ffffff;
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            padding: 0;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+            animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* 弹窗头部 */
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-title { font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+        .btn-close { color: var(--text-sub); cursor: pointer; font-size: 18px; transition: color 0.2s; }
+        .btn-close:hover { color: var(--ice-primary); }
+
+        /* 弹窗内容 */
+        .modal-body { padding: 24px; overflow-y: auto; max-height: 580px; }
+
+        /* 表单组 */
+        .form-group { margin-bottom: 20px; }
+        .label { display: block; font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px; }
+        
+        /* 输入框样式 */
+        .input-base {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border 0.2s, box-shadow 0.2s;
+            color: var(--text-main);
+        }
+        .input-base:focus { border-color: var(--ice-primary); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1); }
+
+        /* 正则代码输入框 (特殊样式) */
+        .regex-input-wrapper {
+            display: flex; align-items: center;
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 12px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .regex-input-wrapper:focus-within { border-color: var(--ice-primary); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1); }
+        .slash { color: #94a3b8; font-weight: bold; font-size: 16px; }
+        .input-code {
+            border: none; background: transparent; flex-grow: 1; padding: 12px 4px;
+            font-family: 'JetBrains Mono', monospace; font-size: 14px; outline: none; color: #0f172a;
+        }
+        .flags { color: #8b5cf6; font-weight: 600; font-size: 14px; }
+
+        /* 测试区域 (Grid) */
+        .test-playground {
+            display: grid;
+            grid-template-columns: 1fr 32px 1fr;
+            gap: 12px;
+            align-items: center;
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .test-box { display: flex; flex-direction: column; gap: 6px; }
+        .sub-label { font-size: 11px; color: var(--text-sub); font-weight: 600; text-transform: uppercase; }
+        .textarea-code {
+            width: 100%; height: 80px; resize: none;
+            border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px;
+            background: white; outline: none;
+        }
+        .textarea-code:focus { border-color: var(--ice-primary); }
+        
+        .arrow-icon {
+            display: flex; align-items: center; justify-content: center;
+            color: var(--ice-primary); background: #ecfeff;
+            width: 32px; height: 32px; border-radius: 50%;
+        }
+
+        /* AI 提示卡片 */
+        .ai-help-card {
+            margin-top: 24px;
+            background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+            border: 1px solid #ddd6fe;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex; align-items: flex-start; gap: 12px;
+        }
+        .ai-icon-box {
+            width: 36px; height: 36px; background: white; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; color: #8b5cf6;
+            box-shadow: 0 2px 4px rgba(139, 92, 246, 0.1); flex-shrink: 0;
+        }
+        .ai-content { flex-grow: 1; }
+        .ai-title { font-size: 13px; font-weight: 700; color: #5b21b6; margin-bottom: 4px; }
+        .ai-text { font-size: 12px; color: #6d28d9; line-height: 1.5; margin-bottom: 8px; }
+        .btn-copy {
+            background: white; border: 1px solid #ddd6fe; color: #7c3aed;
+            padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn-copy:hover { background: #8b5cf6; color: white; border-color: #8b5cf6; }
+
+        /* 弹窗底部 */
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border);
+            display: flex; justify-content: flex-end; gap: 12px;
+            background: #fdfdfd;
+        }
+        
+        .btn-cancel {
+            padding: 8px 20px; border-radius: 10px; font-size: 13px; font-weight: 600;
+            color: var(--text-sub); background: transparent; border: 1px solid transparent;
+            cursor: pointer;
+        }
+        .btn-cancel:hover { background: #f1f5f9; }
+
+        .btn-save {
+            padding: 8px 24px; border-radius: 10px; font-size: 13px; font-weight: 600;
+            color: white; background: linear-gradient(135deg, var(--ice-primary) 0%, var(--ice-primary-dark) 100%);
+            border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+            display: flex; align-items: center; gap: 6px;
+        }
+        .btn-save:hover { box-shadow: 0 6px 16px rgba(6, 182, 212, 0.4); transform: translateY(-1px); }
+
+        /* 动画 */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    </style>
+</head>
+<body>
+
+    <div class="app-window">
+        
+        <!-- 侧边栏 (Split Dock) -->
+        <nav class="sidebar">
+            <div class="dock-top">
+                <div class="nav-btn active"><i class="fa-solid fa-border-all"></i></div>
+                <div class="nav-btn"><i class="fa-solid fa-bolt"></i></div>
+                <div class="nav-btn"><i class="fa-solid fa-list-ul"></i></div>
+            </div>
+            <div class="dock-bottom">
+                <div class="nav-btn" style="background:transparent; color:#94a3b8;"><i class="fa-solid fa-circle-info"></i></div>
+                <div class="app-logo"><i class="fa-solid fa-cube"></i></div>
+            </div>
+        </nav>
+
+        <!-- 主内容区 (背景) -->
+        <main class="main-content">
+            <header class="top-bar">
+                <h2 style="font-size:16px; font-weight:700;">Template Studio</h2>
+                <div class="doc-selector">
+                    <i class="fa-regular fa-file-image" style="color:var(--ice-primary)"></i>
+                    <span>Banner_Project_v1.psd</span>
+                </div>
+            </header>
+            <div class="workspace-bg">
+                <div class="panel-bg" style="width: 200px;"></div>
+                <div class="panel-bg" style="flex-grow: 1;"></div>
+            </div>
+        </main>
+
+        <!-- =========================================
+             NEW: 正则配置弹窗 (Modal)
+             ========================================= -->
+        <div class="modal-overlay">
+            <div class="modal-box">
+                <!-- 头部 -->
+                <div class="modal-header">
+                    <div class="modal-title">
+                        <i class="fa-solid fa-code" style="color:var(--ice-primary)"></i>
+                        添加正则规则 (Regular Expression)
+                    </div>
+                    <i class="fa-solid fa-xmark btn-close"></i>
+                </div>
+
+                <!-- 内容 -->
+                <div class="modal-body">
+                    
+                    <!-- 1. 规则定义 -->
+                    <div class="form-group">
+                        <label class="label">规则名称</label>
+                        <input type="text" class="input-base" placeholder="例如：移除所有空格" value="价格格式化">
+                    </div>
+
+                    <div style="display: flex; gap: 16px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label class="label">查找模式 (Find Pattern)</label>
+                            <div class="regex-input-wrapper">
+                                <span class="slash">/</span>
+                                <input type="text" class="input-code" value="(\d+)(\.00)?">
+                                <span class="slash">/</span>
+                                <span class="flags">g</span>
+                            </div>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="label">替换为 (Replace With)</label>
+                            <input type="text" class="input-base" placeholder="留空则删除" value="$1 USD" style="font-family:'JetBrains Mono';">
+                        </div>
+                    </div>
+
+                    <!-- 2. 测试区域 -->
+                    <label class="label">测试游乐场 (Test Playground)</label>
+                    <div class="test-playground">
+                        <div class="test-box">
+                            <span class="sub-label">输入文本 (Input)</span>
+                            <textarea class="textarea-code">Item Price: 199.00
+Discount: 50</textarea>
+                        </div>
+                        <div class="arrow-icon">
+                            <i class="fa-solid fa-arrow-right-arrow-left" style="font-size:12px;"></i>
+                        </div>
+                        <div class="test-box">
+                            <span class="sub-label">输出结果 (Output)</span>
+                            <textarea class="textarea-code" style="background:#f1f5f9; color:#334155;">Item Price: 199 USD
+Discount: 50 USD</textarea>
+                        </div>
+                    </div>
+
+                    <!-- 3. AI 助手 -->
+                    <div class="ai-help-card">
+                        <div class="ai-icon-box">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        </div>
+                        <div class="ai-content">
+                            <div class="ai-title">搞不定正则？问问 AI 吧</div>
+                            <div class="ai-text">
+                                不确定怎么写？复制下面的 Prompt 发送给 DeepSeek 或 ChatGPT，让它帮你写出完美的表达式。
+                            </div>
+                            <button class="btn-copy">
+                                <i class="fa-regular fa-copy"></i> 复制求助指令
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- 底部 -->
+                <div class="modal-footer">
+                    <button class="btn-cancel">取消</button>
+                    <button class="btn-save">
+                        <i class="fa-solid fa-check"></i> 保存规则
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>

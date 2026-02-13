@@ -1,0 +1,321 @@
+/* 小冰美化助手 - Photoshop UXP 适配样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary: #06b6d4;
+    --primary-dark: #0891b2;
+    --primary-light: #22d3ee;
+
+    --bg: #f9fafb;
+    --card-bg: rgba(255, 255, 255, 0.92);
+    --text-primary: #333333;
+    --text-secondary: #6b7280;
+    --border: #e5e7eb;
+
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.10);
+    --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.18);
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    font-family: 'Microsoft YaHei UI', 'Segoe UI', 'PingFang SC', sans-serif;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: var(--text-primary);
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+/* 主容器：始终居中 */
+.app {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 18px;
+}
+
+/* 卡片（参考图：居中 + 大圆角 + 柔和阴影） */
+.card {
+    /* UXP 面板里 vw/vh 可能不等于面板实际可用空间，优先使用容器百分比 */
+    width: calc(100% - 36px);
+    max-width: 460px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 28px;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    padding: 26px 22px 22px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-height: calc(100% - 36px);
+    overflow: auto;
+}
+
+/* 避免 UXP/PS 容器滚动条占位导致内容视觉偏移 */
+.card {
+    scrollbar-width: none; /* Firefox */
+}
+.card::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+.logo {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 14px;
+    width: 100%;
+}
+
+.logo-badge {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary-dark) 100%);
+    box-shadow: 0 12px 28px rgba(6, 182, 212, 0.35);
+}
+
+.title {
+    /* 自适应字号：避免在 PS 面板窄宽/DPI 缩放时裁切或掉字 */
+    font-size: clamp(22px, 7.2vw, 28px);
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--primary-dark);
+    margin: 0 0 14px;
+    white-space: nowrap;
+    display: inline-block;
+    max-width: 100%;
+    text-align: center;
+    padding: 0 6px;
+}
+
+/* 窄面板（PS 停靠栏常见）下进一步压缩 */
+@media (max-width: 360px) {
+    .app { padding: 14px; }
+    .card { padding: 22px 18px 18px; border-radius: 22px; }
+    .logo-badge { width: 60px; height: 60px; border-radius: 16px; }
+    .title { font-size: 24px; margin-bottom: 12px; }
+    .status-container { margin-top: 0; }
+}
+
+/* 状态指示器 */
+.status-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 0;
+    width: 100%;
+}
+
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+    flex-shrink: 0;
+}
+
+.status-indicator.connected {
+    background-color: var(--success);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.45);
+}
+
+.status-indicator.disconnected {
+    background-color: var(--error);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.45);
+}
+
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
+}
+
+.status-text {
+    font-size: 15px;
+    font-weight: 500;
+    color: rgba(17, 24, 39, 0.72);
+}
+
+/* 已移除手动连接 UI */
+
+/* ============================================
+   自定义对话框样式
+   ============================================ */
+
+/* 对话框背景遮罩 */
+.custom-dialog {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    padding: 0;
+    border: none;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.custom-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+/* 对话框内容容器 */
+.dialog-content {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    min-width: 280px;
+    max-width: 360px;
+    box-shadow: var(--shadow-lg),
+                0 0 0 1px rgba(6, 182, 212, 0.10);
+    border: 1px solid rgba(6, 182, 212, 0.18);
+    text-align: center;
+    position: relative;
+    animation: dialogFadeIn 0.3s ease-out;
+}
+
+@keyframes dialogFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* 对话框图标 */
+.dialog-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+/* 成功样式 - 绿色勾 */
+.dialog-icon.success {
+    background: linear-gradient(135deg, var(--success), #22c55e);
+    color: white;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+}
+
+.dialog-icon.success::before {
+    content: "✓";
+}
+
+/* 错误样式 - 红色叉 */
+.dialog-icon.error {
+    background: linear-gradient(135deg, var(--error), #ef4444);
+    color: white;
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+}
+
+.dialog-icon.error::before {
+    content: "✕";
+}
+
+/* 默认样式 - 紫色信息 */
+.dialog-icon.default {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+    box-shadow: 0 4px 16px rgba(6, 182, 212, 0.35);
+}
+
+.dialog-icon.default::before {
+    content: "i";
+}
+
+/* 对话框标题 */
+.dialog-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+/* 对话框消息 */
+.dialog-message {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    line-height: 1.6;
+    word-wrap: break-word;
+}
+
+/* 对话框按钮 */
+.dialog-button {
+    width: 100%;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    border: none;
+    border-radius: var(--radius-md);
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'Microsoft YaHei UI', 'Segoe UI', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 16px rgba(6, 182, 212, 0.30);
+    letter-spacing: 0.3px;
+}
+
+.dialog-button:hover {
+    background: linear-gradient(135deg, var(--primary-light), var(--primary-dark));
+    box-shadow: 0 6px 24px rgba(6, 182, 212, 0.42);
+    opacity: 0.95;
+}
+
+.dialog-button:active {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    box-shadow: 0 2px 8px rgba(6, 182, 212, 0.30);
+    opacity: 0.9;
+}

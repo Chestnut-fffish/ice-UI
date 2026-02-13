@@ -1,0 +1,46 @@
+[
+    {
+        "type": "gaussianBlur",
+        "name": "高斯模糊",
+        "params": [
+            {
+                "display_name": "半径",
+                "internal_name": "radius",
+                "min": 0.1,
+                "max": 250.0,
+                "default": 1.0,
+                "unit": "px"
+            }
+        ]
+    },
+    {
+        "type": "emboss",
+        "name": "浮雕效果",
+        "params": [
+            {
+                "display_name": "角度",
+                "internal_name": "angle",
+                "min": -180,
+                "max": 180,
+                "default": 135,
+                "unit": "°"
+            },
+            {
+                "display_name": "高度",
+                "internal_name": "height",
+                "min": 1,
+                "max": 100,
+                "default": 2,
+                "unit": "px"
+            },
+            {
+                "display_name": "数量",
+                "internal_name": "amount",
+                "min": 1,
+                "max": 500,
+                "default": 100,
+                "unit": "%"
+            }
+        ]
+    }
+]
