@@ -6,6 +6,7 @@ import json
 import asyncio
 import webbrowser
 import os
+import html
 import json
 import re
 import datetime
@@ -408,6 +409,147 @@ ui.add_css('''
   .ice-rapid-textarea textarea {
     font-size: 12px !important;
     line-height: 1.5 !important;
+  }
+  .ice-batch-uploader .q-uploader {
+    width: 100% !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    background: #f8fafc !important;
+    min-height: 92px !important;
+    transition: all 0.22s ease !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(255, 255, 255, 0.32), inset 0 6px 14px rgba(15, 23, 42, 0.03);
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .ice-batch-uploader .q-uploader::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    border: 1.2px dashed rgba(148, 163, 184, 0.35);
+    pointer-events: none;
+  }
+  .ice-batch-uploader .q-uploader:hover {
+    border-color: #22d3ee !important;
+    background: #f0f9ff !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(34, 211, 238, 0.16), inset 0 8px 16px rgba(6, 182, 212, 0.06);
+    transform: none;
+  }
+  .ice-batch-uploader .q-uploader__header {
+    min-height: 92px !important;
+    background: transparent !important;
+    color: #64748b !important;
+    padding: 10px 12px !important;
+  }
+  .ice-batch-uploader .q-uploader__header-content {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+    gap: 4px;
+  }
+  .ice-batch-uploader .q-uploader__header-content::before {
+    content: "table_view";
+    font-family: "Material Icons";
+    font-size: 20px;
+    line-height: 1;
+    color: #06b6d4;
+    opacity: 0.9;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .ice-batch-uploader .q-uploader__title {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    letter-spacing: 0.01em;
+  }
+  .ice-batch-uploader .q-uploader__subtitle {
+    display: none !important;
+  }
+  .ice-batch-uploader .q-uploader__list,
+  .ice-batch-uploader .q-uploader__header .q-btn,
+  .ice-batch-uploader .q-linear-progress,
+  .ice-batch-uploader .q-uploader__header-content .q-chip,
+  .ice-batch-uploader .q-uploader__header-content .q-uploader__counter {
+    display: none !important;
+  }
+  .ice-batch-uploader-note {
+    font-size: 9px;
+    color: #94a3b8;
+    padding-left: 6px;
+    letter-spacing: 0.02em;
+  }
+  .ice-preview-table-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #f8fafc;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), inset 0 10px 20px rgba(15, 23, 42, 0.03);
+    overflow: hidden;
+  }
+  .ice-preview-table-header {
+    background: #f1f5f9;
+    border-bottom: 1px solid #dbe5ef;
+  }
+  .ice-preview-table-row {
+    width: 100%;
+    margin: 0 !important;
+    border-bottom: 1px solid #eef2f7;
+    background: #ffffff;
+    transition: background 0.18s ease;
+  }
+  .ice-preview-table-row:hover {
+    background: #f8fbff;
+  }
+  .ice-preview-cell {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 11px;
+    color: #334155;
+    border-right: 1px solid #eef2f7;
+  }
+  .ice-preview-cell:last-child {
+    border-right: none;
+  }
+  .ice-preview-cell-head {
+    min-height: 34px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .ice-preview-col-check-head, .ice-preview-col-serial-head {
+    background: #eef2f7;
+    color: #64748b;
+  }
+  .ice-preview-col-var-head {
+    background: #ecfeff;
+    color: #0e7490;
+  }
+  .ice-preview-col-check, .ice-preview-col-serial {
+    background: #f1f5f9 !important;
+  }
+  .ice-preview-col-var {
+    background: #ffffff;
+    color: #1e293b;
+  }
+  .ice-preview-scroll .q-scrollarea__content {
+    padding: 0 !important;
+  }
+  .ice-preview-grid-row {
+    display: grid !important;
+    width: 100%;
+    align-items: stretch;
+  }
+  .ice-preview-grid-row.ice-preview-table-header {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+  .ice-preview-grid-row .ice-preview-cell {
+    min-width: 0;
   }
   .ice-btn-terminate {
     padding: 4px 12px;
@@ -1582,7 +1724,8 @@ class RapidExportPanel:
         self.collapsed = True
         
         # 任务队列引擎状态
-        self.queue = []
+        self.queue = []  # 等待执行的原始数据列表
+        self.task_history = []  # 所有任务的完整记录（含状态和元数据）
         self.is_running = False
         self.strategy_snapshot = None
         self.processed_count = 0
@@ -1610,6 +1753,7 @@ class RapidExportPanel:
         self.manual_textarea = None
         self.overlay = None
         self.terminate_btn = None
+        self.file_uploader = None
         
         self._build_ui()
         
@@ -1683,7 +1827,7 @@ class RapidExportPanel:
                                 ui.label('手动粘贴').classes('text-[10px] font-bold text-slate-400 uppercase tracking-widest')
                                 ui.button('入队处理', on_click=self._process_manual_paste) \
                                     .props('flat dense').classes('text-[10px] text-primary lowercase tracking-tight')
-                            self.manual_textarea = ui.textarea(placeholder='在此粘贴文本...').props('outlined dense hide-bottom-space') \
+                            self.manual_textarea = ui.textarea(placeholder='在此粘贴文本... 支持制表符、逗号、空格分隔，每行一条数据').props('outlined dense hide-bottom-space') \
                                 .classes('w-full ice-rapid-textarea bg-white shadow-sm rounded-xl')
 
                         # 3. 批量解析
@@ -1695,28 +1839,23 @@ class RapidExportPanel:
                                     self.ignore_header_switch = ui.switch(value=self.ignore_header) \
                                         .props('dense size="xs"').on_value_change(self._on_ignore_header_change)
                             
-                            # 文件选择与拖拽区域
-                            with ui.element('div').classes('w-full relative group').on('click', lambda: ui.run_javascript(f"document.getElementById('c{self.file_uploader.id}').click()")):
-                                # 底层上传组件 (隐藏但覆盖)
-                                self.file_uploader = ui.upload(
-                                    label='解析 Excel / CSV',
-                                    multiple=False,
-                                    on_upload=self._handle_file_upload,
-                                    auto_upload=True
-                                ).props('hide-upload-btn dense').classes('absolute inset-0 opacity-0 z-10 pointer-events-none')
-                                
-                                # 表层美化 UI
-                                with ui.element('div').classes('w-full h-16 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 group-hover:bg-slate-50 group-hover:border-cyan-300 transition-all cursor-pointer'):
-                                    ui.icon('table_view').classes('text-lg text-slate-300 group-hover:text-cyan-400')
-                                    ui.label('点击或拖入表格文件').classes('text-[11px] text-slate-400 group-hover:text-cyan-600')
-                                    ui.label('.csv / .xlsx').classes('text-[8px] text-slate-300')
+                            self.file_uploader = ui.upload(
+                                label='点击或拖拽表格文件',
+                                multiple=False,
+                                on_upload=self._handle_file_upload,
+                                auto_upload=True
+                            ).props('hide-upload-btn accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"').classes('w-full ice-batch-uploader')
+                            self.file_uploader.on('click', lambda _: self._open_table_file_dialog())
+                            ui.label('支持 .csv / .xlsx').classes('ice-batch-uploader-note')
 
                         # 4. 导出位置
                         with ui.column().classes('w-full gap-2'):
                             ui.label('导出位置').classes('text-[10px] font-bold text-slate-400 uppercase tracking-widest')
-                            with ui.row().classes('w-full items-center gap-2 bg-slate-50 rounded-xl p-2 border border-slate-100'):
-                                self.export_path_label = ui.label(self.export_path).classes('text-[10px] text-slate-500 truncate flex-grow px-1 font-mono')
-                                ui.icon('folder_open').classes('text-sm text-slate-400 cursor-pointer hover:text-cyan-600').on('click', self._pick_export_path)
+                            with ui.row().classes('w-full items-start gap-2 bg-slate-50 rounded-xl p-2 border border-slate-100 overflow-hidden'):
+                                # 路径区域：禁止横向溢出，长路径自动换行，占用剩余宽度
+                                with ui.element('div').classes('flex-grow overflow-hidden min-w-0'):
+                                    self.export_path_label = ui.label(self.export_path).classes('text-[10px] text-slate-500 px-1 font-mono break-all leading-relaxed')
+                                ui.icon('folder_open').classes('text-sm text-slate-400 cursor-pointer hover:text-cyan-600 shrink-0 self-center').on('click', self._pick_export_path)
 
                         # 5. 渲染完成后动作
                         with ui.row().classes('w-full items-center justify-between'):
@@ -1765,51 +1904,383 @@ class RapidExportPanel:
         self.copy_after_render = e.value
         self._save_settings()
 
+    def _extract_upload_filename(self, e):
+        valid_exts = ('.csv', '.xlsx', '.xlsm', '.txt')
+        generic_names = {'smallfileupload', 'file', 'blob', 'upload', 'object', 'bytesio', 'content'}
+
+        def _pick_valid_name(value):
+            if not value:
+                return None
+            text = str(value).strip().strip('"').strip("'")
+            if not text:
+                return None
+            lowered = text.lower()
+            if lowered in ('none', 'null', 'undefined', '未命名文件'):
+                return None
+            base = os.path.basename(text.replace('\\', '/'))
+            if not base:
+                return None
+            stem = os.path.splitext(base)[0].strip().lower()
+            if stem in generic_names:
+                return None
+            return base
+
+        candidates = [
+            getattr(e, 'name', None),
+            getattr(e, 'filename', None),
+            getattr(getattr(e, 'content', None), 'name', None),
+            getattr(getattr(e, 'content', None), 'filename', None),
+            getattr(getattr(getattr(e, 'content', None), 'file', None), 'name', None),
+        ]
+        names = getattr(e, 'names', None)
+        if isinstance(names, str) and names.strip():
+            candidates.append(names)
+        elif isinstance(names, (list, tuple)) and names:
+            candidates.extend(names)
+
+        for c in candidates:
+            chosen = _pick_valid_name(c)
+            if chosen and chosen.lower().endswith(valid_exts):
+                return chosen
+        for c in candidates:
+            chosen = _pick_valid_name(c)
+            if chosen:
+                return chosen
+
+        # 兜底：从事件公开属性里找“看起来像文件名”的字符串
+        for attr in dir(e):
+            if attr.startswith('_'):
+                continue
+            try:
+                val = getattr(e, attr)
+            except Exception:
+                continue
+            if isinstance(val, str):
+                chosen = _pick_valid_name(val)
+                if chosen and chosen.lower().endswith(valid_exts):
+                    return chosen
+            elif isinstance(val, (list, tuple)):
+                for item in val:
+                    chosen = _pick_valid_name(item)
+                    if chosen and chosen.lower().endswith(valid_exts):
+                        return chosen
+            elif hasattr(val, '__dict__'):
+                for maybe in val.__dict__.values():
+                    chosen = _pick_valid_name(maybe)
+                    if chosen and chosen.lower().endswith(valid_exts):
+                        return chosen
+        return '导入文件'
+
+    def _get_active_group_labels(self):
+        labels = []
+        used_text_keys = {r['mapping_key'] for r in template_state.text_rules}
+        for key in template_state.text_groups:
+            if key in used_text_keys:
+                labels.append(str(key))
+        used_img_keys = {r['mapping_key'] for r in template_state.image_rules}
+        for key in template_state.image_groups:
+            if key in used_img_keys:
+                labels.append(str(key))
+        return labels
+
+    async def _extract_upload_bytes(self, e):
+        content = getattr(e, 'content', None) or getattr(e, 'file', None) or getattr(e, 'data', None)
+        if content is None:
+            for attr in dir(e):
+                if attr.startswith('_'):
+                    continue
+                try:
+                    val = getattr(e, attr)
+                except Exception:
+                    continue
+                if hasattr(val, 'read') or isinstance(val, (bytes, bytearray, memoryview)):
+                    content = val
+                    break
+        if content is None:
+            return None
+        if hasattr(content, 'file') and hasattr(content.file, 'read'):
+            content = content.file
+        if isinstance(content, memoryview):
+            return content.tobytes()
+        if isinstance(content, (bytes, bytearray)):
+            return bytes(content)
+        if hasattr(content, 'read'):
+            import inspect
+            try:
+                if hasattr(content, 'seek'):
+                    content.seek(0)
+            except Exception:
+                pass
+            data = content.read()
+            if inspect.isawaitable(data):
+                data = await data
+            return data if isinstance(data, bytes) else (str(data).encode('utf-8') if data is not None else None)
+        return str(content).encode('utf-8')
+
+    def _decode_csv_bytes(self, file_bytes):
+        for enc in ('utf-8-sig', 'utf-8', 'gb18030', 'gbk'):
+            try:
+                return file_bytes.decode(enc)
+            except Exception:
+                continue
+        return file_bytes.decode('utf-8', errors='ignore')
+
+    def _looks_like_xlsx(self, file_bytes):
+        if not file_bytes or len(file_bytes) < 4 or file_bytes[:2] != b'PK':
+            return False
+        try:
+            import zipfile
+            with zipfile.ZipFile(BytesIO(file_bytes)) as zf:
+                names = set(zf.namelist())
+                return '[Content_Types].xml' in names and any(name.startswith('xl/') for name in names)
+        except Exception:
+            return False
+
+    def _looks_like_csv(self, file_bytes):
+        if not file_bytes:
+            return False
+        text = self._decode_csv_bytes(file_bytes[:16384])
+        if not text:
+            return False
+        sample_lines = [ln for ln in text.splitlines() if ln.strip()][:5]
+        if not sample_lines and text.strip():
+            sample_lines = [text.strip()]
+        if not sample_lines:
+            return False
+        delimiters = [',', '\t', ';', '|']
+        for delim in delimiters:
+            if any(delim in line for line in sample_lines):
+                return True
+        return False
+
+    def _detect_table_format(self, filename, file_bytes):
+        suffix = os.path.splitext((filename or '').lower())[1]
+        if self._looks_like_xlsx(file_bytes):
+            return 'xlsx'
+        if suffix in ('.xlsx', '.xlsm'):
+            return 'xlsx'
+        if suffix in ('.csv', '.txt'):
+            return 'csv'
+        if self._looks_like_csv(file_bytes):
+            return 'csv'
+        return None
+
+    def _open_table_file_dialog(self):
+        if not self.file_uploader:
+            return
+        ui.run_javascript(f'''
+            (() => {{
+                const root = document.getElementById('c{self.file_uploader.id}');
+                if (!root) return;
+                const input = root.querySelector('input[type="file"]');
+                if (!input) return;
+                input.setAttribute('accept', '.csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                input.click();
+            }})();
+        ''')
+
     async def _handle_file_upload(self, e):
-        """处理上传的表格文件"""
-        content = e.content
-        filename = e.name
-        
+        """处理上传的表格文件：解析 -> 预览 -> 用户确认后入队。"""
         try:
             import io
-            lines = []
-            if filename.endswith('.csv'):
+            filename = self._extract_upload_filename(e)
+            file_bytes = await self._extract_upload_bytes(e)
+            if not file_bytes:
+                ui.notify("读取上传文件失败，请重试拖拽或点击上传", type='negative')
+                return
+
+            file_type = self._detect_table_format(filename, file_bytes)
+            parsed_rows = []
+            if file_type is None:
+                # 容错：部分系统上传事件无法给出可靠后缀，尝试按 CSV 直接解析。
                 import csv
-                text_stream = io.StringIO(content.read().decode('utf-8'))
+                try:
+                    probe_stream = io.StringIO(self._decode_csv_bytes(file_bytes))
+                    probe_reader = csv.reader(probe_stream)
+                    probe_rows = [r for r in probe_reader if r]
+                    if probe_rows:
+                        file_type = 'csv'
+                except Exception:
+                    pass
+            if file_type == 'csv':
+                import csv
+                text_stream = io.StringIO(self._decode_csv_bytes(file_bytes))
                 reader = csv.reader(text_stream)
                 for row in reader:
-                    if row: lines.append('\t'.join(row)) # 转换为制表符分隔行以便后续解析
-            elif filename.endswith('.xlsx'):
+                    if row:
+                        normalized = [str(cell).strip() if cell is not None else "" for cell in row]
+                        if any(cell != "" for cell in normalized):
+                            parsed_rows.append(normalized)
+            elif file_type == 'xlsx':
                 try:
                     from openpyxl import load_workbook
-                    wb = load_workbook(filename=io.BytesIO(content.read()))
+                    wb = load_workbook(filename=io.BytesIO(file_bytes))
                     ws = wb.active
                     for row in ws.iter_rows(values_only=True):
                         if any(row):
-                            # 过滤掉 None 值
                             str_row = [str(cell) if cell is not None else "" for cell in row]
-                            lines.append('\t'.join(str_row))
+                            parsed_rows.append(str_row)
                 except ImportError:
                     ui.notify("未安装 openpyxl，无法解析 Excel。请使用 CSV 或运行 'pip install openpyxl'", type='warning')
                     return
             else:
-                ui.notify("仅支持 .csv 或 .xlsx 文件", type='warning')
+                ui.notify("无法识别文件格式，请上传 CSV 或 XLSX", type='warning')
                 return
 
-            if not lines:
+            if not parsed_rows:
                 ui.notify("文件为空", type='warning')
                 return
 
-            # 处理忽略表头
-            if self.ignore_header and len(lines) > 1:
-                lines = lines[1:]
-            
-            self.add_to_queue(lines, source=f"文件 {filename}")
-            
+            text_vars, img_vars = self._get_active_group_counts()
+            total_vars = text_vars + img_vars
+            group_labels = self._get_active_group_labels()
+            if len(group_labels) < total_vars:
+                group_labels.extend([f'变量 {i + 1}' for i in range(len(group_labels), total_vars)])
+            if total_vars <= 0:
+                ui.notify("当前策略没有分配可变量（文本/图片组），无法进行预览", type='warning')
+                return
+
+            def build_preview_candidates(ignore_header_value: bool, filter_empty_value: bool):
+                start_idx = 1 if ignore_header_value and len(parsed_rows) > 1 else 0
+                candidates = []
+                invalid_count = 0
+                for source_idx in range(start_idx, len(parsed_rows)):
+                    row = parsed_rows[source_idx]
+                    normalized = [str(cell).strip() if cell is not None else "" for cell in row]
+                    cells = normalized[:total_vars]
+                    if len(cells) < total_vars:
+                        cells.extend([''] * (total_vars - len(cells)))
+                    # 表格场景允许空值和列数不匹配（自动补齐/截断），仅按“整行为空”可选过滤
+                    if filter_empty_value and not any(cells):
+                        invalid_count += 1
+                        continue
+                    candidates.append({
+                        'source_idx': source_idx,
+                        'cells': cells,
+                        'line': '\t'.join(cells),
+                    })
+                return candidates, invalid_count
+
+            all_candidates, _ = build_preview_candidates(False, False)
+            if not all_candidates:
+                ui.notify("没有识别到可导入的数据，请检查文件内容", type='warning')
+                return
+
+            # 弹出预览对话框：列表选择、默认全选、手动勾选、一键入队或放弃
+            async def show_preview_dialog():
+                selected_rows = {}
+
+                with ui.dialog().classes('backdrop-blur-sm').props('persistent') as dialog, \
+                     ui.card().classes('w-[min(860px,92vw)] max-w-[92vw] p-0 gap-0 rounded-[28px] ice-card bg-white shadow-2xl overflow-hidden'):
+
+                    with ui.row().classes('w-full justify-between items-center px-6 py-4 border-b border-slate-100 gap-3'):
+                        with ui.row().classes('items-center gap-3'):
+                            ui.icon('table_rows').classes('text-cyan-500 text-xl')
+                            ui.label('解析预览').classes('text-lg font-bold text-slate-800')
+                            ui.label(f'{filename}').classes('text-[11px] text-slate-400')
+                        ui.icon('close', size='20px').classes('cursor-pointer text-slate-300 hover:text-red-500 transition-colors').on('click', dialog.close)
+
+                    with ui.column().classes('w-full p-6 gap-4'):
+                        with ui.row().classes('w-full items-center justify-between'):
+                            with ui.row().classes('items-center gap-4'):
+                                ui.label('跳过首行（通常是表头）').classes('text-xs font-bold text-slate-600')
+                                preview_ignore_header = ui.switch(value=self.ignore_header).props('dense size="xs"')
+                                ui.label('自动忽略空行').classes('text-xs font-bold text-slate-600')
+                                preview_filter_empty = ui.switch(value=True).props('dense size="xs"')
+                                status_label = ui.label('').classes('text-[10px] text-slate-400')
+
+                            with ui.row().classes('items-center gap-2'):
+                                def select_all():
+                                    candidates, _ = build_preview_candidates(preview_ignore_header.value, preview_filter_empty.value)
+                                    for item in candidates:
+                                        selected_rows[item['source_idx']] = True
+                                    render_list()
+                                def deselect_all():
+                                    candidates, _ = build_preview_candidates(preview_ignore_header.value, preview_filter_empty.value)
+                                    for item in candidates:
+                                        selected_rows[item['source_idx']] = False
+                                    render_list()
+                                ui.button('全选').props('flat dense no-caps').classes('text-xs text-cyan-600 hover:bg-cyan-50 rounded px-3').on('click', select_all)
+                                ui.button('取消全选').props('flat dense no-caps').classes('text-xs text-slate-500 hover:bg-slate-100 rounded px-3').on('click', deselect_all)
+
+                        grid_template = f'grid-template-columns: 64px 74px repeat({total_vars}, minmax(140px, 1fr));'
+                        with ui.element('div').classes('w-full ice-preview-table-wrap'):
+                            list_container = ui.scroll_area().classes('w-full max-h-[46vh] bg-white ice-preview-scroll')
+                            with list_container:
+                                list_inner = ui.column().classes('w-full gap-0')
+
+                        def render_list():
+                            list_inner.clear()
+                            candidates, invalid_count = build_preview_candidates(preview_ignore_header.value, preview_filter_empty.value)
+                            status_label.set_text(f'已识别 {len(candidates)} 条，忽略空行 {invalid_count} 条')
+
+                            for item in candidates:
+                                if item['source_idx'] not in selected_rows:
+                                    selected_rows[item['source_idx']] = True
+
+                            with list_inner:
+                                with ui.row().classes('w-full ice-preview-grid-row ice-preview-table-header').style(grid_template):
+                                    with ui.element('div').classes('ice-preview-cell ice-preview-cell-head ice-preview-col-check-head justify-center'):
+                                        ui.label('选中')
+                                    with ui.element('div').classes('ice-preview-cell ice-preview-cell-head ice-preview-col-serial-head justify-center'):
+                                        ui.label('序列')
+                                    for col_idx in range(total_vars):
+                                        with ui.element('div').classes('ice-preview-cell ice-preview-cell-head ice-preview-col-var-head'):
+                                            ui.label(group_labels[col_idx])
+
+                                if not candidates:
+                                    with ui.row().classes('w-full justify-center py-10 text-slate-400 text-xs'):
+                                        ui.label('当前没有可预览的数据')
+                                    return
+
+                                for display_i, item in enumerate(candidates, start=1):
+                                    source_idx = item['source_idx']
+                                    cells = item['cells']
+                                    with ui.row().classes('w-full ice-preview-grid-row ice-preview-table-row').style(grid_template):
+                                        def on_check(e, oi=source_idx):
+                                            selected_rows[oi] = e.value
+                                        with ui.element('div').classes('ice-preview-cell ice-preview-col-check justify-center'):
+                                            ui.checkbox(value=selected_rows.get(source_idx, True)).props('dense size="xs"').on_value_change(on_check)
+                                        with ui.element('div').classes('ice-preview-cell ice-preview-col-serial justify-center'):
+                                            ui.label(str(display_i)).classes('text-[10px] text-slate-500 font-semibold')
+                                        for col_idx in range(total_vars):
+                                            value = cells[col_idx] if col_idx < len(cells) else ''
+                                            ui.element('div').classes('ice-preview-cell ice-preview-col-var').add_slot(
+                                                'default',
+                                                f'<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; display: inline-block;">{html.escape(str(value))}</span>'
+                                            )
+
+                        render_list()
+                        preview_ignore_header.on_value_change(lambda _: render_list())
+                        preview_filter_empty.on_value_change(lambda _: render_list())
+
+                    with ui.row().classes('w-full justify-end items-center px-6 py-4 border-t border-slate-100 gap-3'):
+                        ui.button('放弃').props('flat no-caps dense').classes('text-slate-500 font-medium text-xs hover:bg-slate-100 rounded-lg px-4').on('click', dialog.close)
+                        async def confirm_and_add():
+                            lines_to_add = []
+                            candidates, _ = build_preview_candidates(preview_ignore_header.value, preview_filter_empty.value)
+                            for item in candidates:
+                                if selected_rows.get(item['source_idx'], False):
+                                    lines_to_add.append(item['line'])
+                            if not lines_to_add:
+                                ui.notify("请至少选择一条数据", type='warning')
+                                return
+                            dialog.close()
+                            self.add_to_queue(lines_to_add, source=f"文件 {filename}")
+                        ui.button('添加到队列').props('unelevated no-caps dense').classes('bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg px-6 py-2 shadow-md shadow-cyan-200 transition-all').on('click', confirm_and_add)
+
+                await dialog
+
+            await show_preview_dialog()
+
         except Exception as ex:
             ui.notify(f"解析文件失败: {ex}", type='negative')
         finally:
-            self.file_uploader.reset()
+            if self.file_uploader:
+                try:
+                    self.file_uploader.reset()
+                except Exception:
+                    pass
 
     async def _pick_export_path(self):
         """选择导出路径"""
@@ -1820,6 +2291,11 @@ class RapidExportPanel:
 
             def pick_dir_sync():
                 root = tk.Tk()
+                # 隐藏图标（创建透明1x1图标）
+                try:
+                    root.iconbitmap(default='')
+                except Exception:
+                    pass
                 root.withdraw()
                 root.attributes('-topmost', True)
                 initial = os.path.abspath(self.export_path) if self.export_path else os.getcwd()
@@ -1909,8 +2385,19 @@ class RapidExportPanel:
                 
         return text_vars, img_vars
 
+    def _split_input_line(self, line: str, total_vars: int):
+        text = (line or '').strip()
+        if not text:
+            return []
+        # 严格模式：仅支持英文逗号或空格分隔
+        if ',' in text:
+            parts = [p.strip() for p in text.split(',')]
+        else:
+            parts = [p.strip() for p in re.split(r'\s+', text)]
+        return [p for p in parts if p != ""]
+
     def add_to_queue(self, data_lines, source="手动"):
-        """将数据行解析并加入队列"""
+        """将数据行解析并加入队列，同时记录任务历史"""
         if not template_state.current_doc:
             ui.notify("请先打开 PSD 文档并载入策略", type='warning')
             return
@@ -1923,36 +2410,74 @@ class RapidExportPanel:
             ui.notify("当前策略没有分配可变量（文本/图片组），无法执行快速出图", type='warning')
             return
 
+        # 防误触：单参数场景下，剪贴板输入永不自动入队
+        if total_vars == 1 and source.startswith("剪贴板"):
+            return
+
         valid_tasks = []
-        for line in data_lines:
-            # 严格解析：支持 制表符(\t), 逗号(,), 或 多个空格
-            # 优先检查制表符和逗号
-            if '\t' in line:
-                parts = [p.strip() for p in line.split('\t')]
-            elif ',' in line:
-                parts = [p.strip() for p in line.split(',')]
-            else:
-                # 回退到正则分割连续空格
-                parts = [p.strip() for p in re.split(r'\s{2,}', line) if p.strip()]
-                if len(parts) < total_vars:
-                    # 如果仍然不足，尝试简单空格分割
-                    parts = line.split()
-            
-            if len(parts) >= total_vars:
-                valid_tasks.append(parts[:total_vars])
-        
+        invalid_rows = []
+        non_empty_lines = [ln for ln in data_lines if str(ln).strip()]
+        for idx, line in enumerate(non_empty_lines, start=1):
+            if source.startswith("文件 "):
+                file_parts = [p.strip() for p in str(line).split('\t')]
+                if len(file_parts) < total_vars:
+                    file_parts.extend([''] * (total_vars - len(file_parts)))
+                elif len(file_parts) > total_vars:
+                    file_parts = file_parts[:total_vars]
+                valid_tasks.append(file_parts)
+                continue
+            parts = self._split_input_line(str(line), total_vars)
+            if len(parts) != total_vars:
+                invalid_rows.append(idx)
+                continue
+            valid_tasks.append(parts)
+
         if not valid_tasks:
-            if source != "剪贴板" and not source.startswith("剪贴板"): # 剪贴板静默失败
-                ui.notify(f"未检测到符合变量数 ({total_vars}列) 的合法数据", type='warning')
+            ui.notify(f"未检测到符合变量数 ({total_vars}列) 的合法数据", type='warning')
+            return
+
+        # 批量严格一致性：任意一行不合法则整批不入队，避免任务半成功半失败
+        if invalid_rows:
+            ui.notify(
+                f"存在 {len(invalid_rows)} 行数据参数量不匹配（必须严格为 {total_vars} 列），本批次未入队",
+                type='warning'
+            )
             return
 
         # 如果队列为空且当前没在运行，则准备启动
         first_time = (not self.queue and not self.is_running)
+
+        # 获取当前策略的渲染预设文件名模板，用于生成预期输出文件名
+        filename_template = "output_{index}"
+        if self.strategy_snapshot and self.strategy_snapshot.get('renders', []):
+            filename_template = self.strategy_snapshot['renders'][0].get('filename', "output_{index}")
         
+        start_idx = len(self.task_history)
+        for i, task_data in enumerate(valid_tasks):
+            # 为每个任务生成可读的“文件名”/标识（用前两个字段拼接）
+            display_name = ' '.join(str(x) for x in task_data[:2])
+            # 用模板生成预期输出文件名
+            output_name = filename_template
+            for j, val in enumerate(task_data):
+                output_name = output_name.replace(f'{{文字组 {j+1}}}', str(val))
+            doc_name = os.path.splitext(template_state.current_doc or "template")[0]
+            output_name = output_name.replace('{模板名}', doc_name)
+            output_name = output_name.replace('{时间}', datetime.datetime.now().strftime('%m%d%H%M'))
+            output_name = re.sub(r'[\/:*?"<>|]', '_', output_name)
+            self.task_history.append({
+                'index': start_idx + i + 1,
+                'data': task_data,
+                'display_name': display_name,
+                'output_name': output_name,
+                'status': 'waiting',  # waiting / running / success / failed
+                'error': None
+            })
+
         self.queue.extend(valid_tasks)
         self.total_count = len(self.queue) + self.processed_count
         ui.notify(f"已从{source}添加 {len(valid_tasks)} 条任务到队列", type='positive')
         self._update_terminate_btn_state()
+        self._update_render_list_ui()
         
         if first_time:
             asyncio.create_task(self.process_queue())
@@ -1975,22 +2500,32 @@ class RapidExportPanel:
             return
 
         self.processed_count = 0
-        self.total_count = len(self.queue)
-        # self.render_list_container.clear() # 交给 _update_render_list_ui 管理
+        self.total_count = len(self.queue) + self.processed_count
         
         try:
             while self.queue and not self.abort_requested:
+                # 找到当前要处理的任务在 task_history 中的索引
+                current_task_data = self.queue[0]
+                current_task_idx = None
+                for idx, t in enumerate(self.task_history):
+                    if t['data'] == current_task_data and t['status'] == 'waiting':
+                        current_task_idx = idx
+                        break
+                if current_task_idx is not None:
+                    self.task_history[current_task_idx]['status'] = 'running'
+                
+                # 取出任务
                 task_data = self.queue.pop(0)
                 self.processed_count += 1
                 
                 # 更新 UI 进度
-                percent = int((self.processed_count / self.total_count) * 100)
+                percent = int((self.processed_count / self.total_count) * 100) if self.total_count > 0 else 0
                 self.progress_label.set_text(f"正在处理 {self.processed_count} / {self.total_count}")
                 self.percent_label.set_text(f"{percent}%")
                 self.progress_bar.style(f"width: {percent}%")
                 
-                # 更新列表 UI (1条完成, 1条进行, 1条等待)
-                self._update_render_list_ui(current_task_info=f"数据: {' '.join(str(x) for x in task_data[:2])}")
+                # 更新列表 UI
+                self._update_render_list_ui()
                 
                 # 2. 构造操作包
                 operations = self._prepare_operations(task_data)
@@ -2010,7 +2545,6 @@ class RapidExportPanel:
                     renders.append(render_item)
 
                 # 4. 执行原子化请求
-                # 注意：这里需要等待完成
                 fut = asyncio.get_event_loop().create_future()
                 def on_done(success, err):
                     if not fut.done(): fut.set_result((success, err))
@@ -2019,27 +2553,47 @@ class RapidExportPanel:
                     operations=operations,
                     renders=renders,
                     debug=False,
-                    target_document=template_state.current_doc, # 显式锁定目标文档，防止 id undefined 错误
+                    target_document=template_state.current_doc,
                     callback=on_done
                 )
                 
                 success, err = await fut
+                rendered_files = success.get('rendered_files', []) if isinstance(success, dict) else []
+                file_errors = [r.get('error') for r in rendered_files if r.get('status') != 'success']
+                atomic_failed = bool(err) or (not success) or bool(file_errors)
                 
-                # 更新列表 UI 状态 (重新渲染列表以反映完成状态)
+                # 更新 task_history 中的任务状态
+                if current_task_idx is not None:
+                    if atomic_failed:
+                        self.task_history[current_task_idx]['status'] = 'failed'
+                        first_file_error = next((str(e) for e in file_errors if e), None)
+                        self.task_history[current_task_idx]['error'] = str(err) if err else (first_file_error or "渲染失败")
+                    else:
+                        self.task_history[current_task_idx]['status'] = 'success'
+                        first_success_name = next((r.get('name') for r in rendered_files if r.get('status') == 'success' and r.get('name')), None)
+                        if first_success_name:
+                            self.task_history[current_task_idx]['output_name'] = str(first_success_name)
+                
+                # 更新列表 UI 状态
                 self._update_render_list_ui()
                 
                 # 如果开启了复制到剪贴板，寻找第一个成功的渲染文件并复制其内容
-                if success and self.copy_after_render:
-                    rendered_files = success.get('rendered_files', [])
+                if (not atomic_failed) and self.copy_after_render:
                     for r_res in rendered_files:
                         if r_res.get('status') == 'success':
-                            # 拼接完整路径并复制图片内容
                             file_path = os.path.abspath(os.path.join(self.export_path, r_res['name']))
                             self._copy_image_to_clipboard(file_path)
-                            break # 仅复制第一个成功的渲染图
+                            break
 
         except Exception as e:
             ui.notify(f"任务循环异常: {e}", type='negative')
+            # 如果有正在运行的任务，标记为失败
+            for t in reversed(self.task_history):
+                if t['status'] == 'running':
+                    t['status'] = 'failed'
+                    t['error'] = str(e)
+                    break
+            self._update_render_list_ui()
         finally:
             self._cleanup_after_run()
 
@@ -2081,26 +2635,54 @@ class RapidExportPanel:
 
     def _copy_image_to_clipboard(self, file_path):
         """将生成的图片文件内容复制到剪贴板 (仅限 Windows)"""
-        if not win32clipboard or not os.path.exists(file_path):
+        if not win32clipboard:
             return
-            
+
         try:
-            if not Image:
+            import time
+            # 等待文件写入完成，避免复制到半截文件
+            for _ in range(5):
+                if os.path.exists(file_path):
+                    try:
+                        # 尝试用只读打开确认文件可用
+                        with open(file_path, 'rb') as f:
+                            f.read(1)
+                        break
+                    except Exception:
+                        pass
+                time.sleep(0.1)
+
+            if not Image or not os.path.exists(file_path):
                 return
 
             # 使用 PIL 读取并转换为 Windows 剪贴板识别的 DIB 格式
+            dib_data = None
             with Image.open(file_path) as img:
                 output = BytesIO()
                 img.convert("RGB").save(output, "BMP")
                 dib_data = output.getvalue()[14:]  # DIB = BMP 去掉 14 字节文件头
                 output.close()
 
-            win32clipboard.OpenClipboard()
-            try:
-                win32clipboard.EmptyClipboard()
-                win32clipboard.SetClipboardData(win32clipboard.CF_DIB, dib_data)
-            finally:
-                win32clipboard.CloseClipboard()
+            if not dib_data:
+                return
+
+            # Windows剪贴板经常被占用，重试3次
+            for attempt in range(3):
+                try:
+                    win32clipboard.OpenClipboard()
+                    try:
+                        win32clipboard.EmptyClipboard()
+                        win32clipboard.SetClipboardData(win32clipboard.CF_DIB, dib_data)
+                        ui.notify("已将渲染结果复制到剪贴板", type='positive')
+                        break
+                    finally:
+                        win32clipboard.CloseClipboard()
+                except Exception as e:
+                    if attempt < 2:
+                        time.sleep(0.1)
+                    else:
+                        print(f"复制图片到剪贴板失败（已重试3次）: {e}")
+
         except Exception as e:
             print(f"复制图片到剪贴板失败: {e}")
 
@@ -2137,28 +2719,82 @@ class RapidExportPanel:
         """保持渲染列表只显示最近三条：1条已完成, 1条进行中, 1条等待中"""
         self.render_list_container.clear()
         with self.render_list_container:
-            # 1. 最近一条已完成的 (如果有已处理的任务)
-            if self.processed_count > 1:
-                with ui.row().classes('w-full items-center gap-2 opacity-60'):
-                    ui.icon('check_circle', color='emerald-500').classes('text-[14px]')
-                    ui.label(f"[{self.processed_count-1:02d}] 上一个任务已完成").classes('text-[10px] text-emerald-600 truncate')
-            
-            # 2. 当前正在进行的 (current_task_info)
-            if current_task_info:
-                with ui.row().classes('w-full items-center gap-2'):
-                    ui.html('''
-                        <svg class="status-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"/>
-                        </svg>
-                    ''', sanitize=False)
-                    ui.label(f"[{self.processed_count:02d}] {current_task_info}").classes('text-[10px] text-cyan-600 truncate flex-grow')
-            
-            # 3. 下一个等待中的 (如果有队列)
-            if self.queue:
-                next_task = self.queue[0]
-                with ui.row().classes('w-full items-center gap-2 opacity-40'):
+            # 1. 从 task_history 中找出上一张、正在执行、下一个的任务
+            last_completed_task = None
+            running_task = None
+            next_waiting_task = None
+
+            # 从后往前找最近一个已完成的
+            for t in reversed(self.task_history):
+                if t['status'] == 'success' or t['status'] == 'failed':
+                    last_completed_task = t
+                    break
+
+            # 找正在执行的
+            for t in self.task_history:
+                if t['status'] == 'running':
+                    running_task = t
+                    break
+
+            # 找第一个等待的
+            for t in self.task_history:
+                if t['status'] == 'waiting':
+                    next_waiting_task = t
+                    break
+
+            # --- 第一行：上一张（已完成/失败）---
+            if last_completed_task:
+                status = last_completed_task['status']
+                if status == 'success':
+                    icon_html = '''<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'''
+                    text_color = 'text-emerald-600'
+                    row_classes = 'w-full items-center gap-2 opacity-70'
+                else:
+                    icon_html = '''<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 18L18 6M6 6l12 12" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/></svg>'''
+                    text_color = 'text-red-500'
+                    row_classes = 'w-full items-center gap-2 opacity-70'
+                with ui.row().classes(row_classes):
+                    ui.html(icon_html, sanitize=False)
+                    display_name = last_completed_task.get('output_name', last_completed_task['display_name'])
+                    ui.label(f"[{last_completed_task['index']:02d}] {display_name}").classes(f'text-[10px] {text_color} truncate flex-grow')
+            else:
+                # 没有上一张时留空占位
+                with ui.row().classes('w-full items-center gap-2 opacity-0'):
                     ui.icon('schedule', color='slate-300').classes('text-[14px]')
-                    ui.label(f"[{self.processed_count+1:02d}] 等待中: {' '.join(str(x) for x in next_task[:1])}...").classes('text-[10px] text-slate-400 truncate')
+                    ui.label('').classes('text-[10px] text-slate-400 truncate flex-grow')
+            
+            # --- 第二行：正在执行 ---
+            if running_task:
+                icon_html = '''<svg class="status-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"/></svg>'''
+                text_color = 'text-cyan-600'
+                with ui.row().classes('w-full items-center gap-2'):
+                    ui.html(icon_html, sanitize=False)
+                    display_name = running_task.get('output_name', running_task['display_name'])
+                    ui.label(f"[{running_task['index']:02d}] {display_name}").classes(f'text-[10px] {text_color} truncate flex-grow')
+            elif not self.is_running and not self.queue and last_completed_task:
+                # 全部完成的情况：第二行显示“全部完成”
+                with ui.row().classes('w-full items-center gap-2'):
+                    ui.icon('check_circle', color='emerald-500').classes('text-[14px]')
+                    ui.label(f'全部完成').classes('text-[10px] text-emerald-600 truncate flex-grow')
+            else:
+                # 没有正在执行时留空占位
+                with ui.row().classes('w-full items-center gap-2 opacity-0'):
+                    ui.icon('schedule', color='slate-300').classes('text-[14px]')
+                    ui.label('').classes('text-[10px] text-slate-400 truncate flex-grow')
+
+            # --- 第三行：下一个（等待中）---
+            if next_waiting_task:
+                icon_html = '''<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'''
+                text_color = 'text-slate-400'
+                with ui.row().classes('w-full items-center gap-2 opacity-50'):
+                    ui.html(icon_html, sanitize=False)
+                    display_name = next_waiting_task.get('output_name', next_waiting_task['display_name'])
+                    ui.label(f"[{next_waiting_task['index']:02d}] {display_name}").classes(f'text-[10px] {text_color} truncate flex-grow')
+            else:
+                # 没有下一个时留空占位
+                with ui.row().classes('w-full items-center gap-2 opacity-0'):
+                    ui.icon('schedule', color='slate-300').classes('text-[14px]')
+                    ui.label('').classes('text-[10px] text-slate-400 truncate flex-grow')
 
     def _update_terminate_btn_state(self):
         """终止按钮仅在队列仍有剩余任务时可用。"""
