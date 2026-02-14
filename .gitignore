@@ -41,6 +41,7 @@ temp_previews/
 test_output/*.jpg
 test_output/*.png
 test_output/*.jpeg
+output/
 
 # Config files with sensitive info
 config/config.json
