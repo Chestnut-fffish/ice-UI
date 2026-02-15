@@ -7,6 +7,7 @@ import asyncio
 import webbrowser
 import os
 import html
+import glob
 import json
 import re
 import datetime
@@ -50,8 +51,6 @@ def cleanup_temp_previews():
 
 # 启动时清理一次
 cleanup_temp_previews()
-
-app.add_static_files('/test_output', 'test_output')
 app.add_static_files(f'/{TEMP_PREVIEW_DIR}', TEMP_PREVIEW_DIR)
 
 # 1. 获取服务器单例
@@ -495,10 +494,11 @@ ui.add_css('''
     margin: 0 !important;
     border-bottom: 1px solid #eef2f7;
     background: #ffffff;
-    transition: background 0.18s ease;
+    transition: background 0.24s ease, box-shadow 0.24s ease;
   }
   .ice-preview-table-row:hover {
-    background: #f8fbff;
+    background: linear-gradient(90deg, #f0f9ff 0%, #e0f2fe 100%);
+    box-shadow: inset 2px 0 0 #38bdf8;
   }
   .ice-preview-cell {
     min-height: 34px;
@@ -550,6 +550,80 @@ ui.add_css('''
   }
   .ice-preview-grid-row .ice-preview-cell {
     min-width: 0;
+  }
+  .ice-history-row {
+    width: 100%;
+    min-height: 26px;
+    padding: 0 6px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.22s ease;
+  }
+  .ice-history-row:hover {
+    background: linear-gradient(90deg, rgba(14,165,233,0.10) 0%, rgba(34,211,238,0.08) 100%);
+  }
+  .ice-history-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .ice-history-dot-waiting { background: #94a3b8; }
+  .ice-history-dot-running { background: #06b6d4; box-shadow: 0 0 0 4px rgba(6,182,212,0.18); }
+  .ice-history-dot-success { background: #10b981; }
+  .ice-history-dot-failed { background: #ef4444; }
+  .ice-history-error-pill {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    border: 1px solid #fca5a5;
+    color: #ef4444;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+    background: #fef2f2;
+    cursor: help;
+  }
+  .ice-error-tooltip {
+    max-width: 360px;
+    background: rgba(15, 23, 42, 0.95) !important;
+    color: #f8fafc !important;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 10px !important;
+    padding: 8px 10px !important;
+    font-size: 10px !important;
+    line-height: 1.45 !important;
+    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35) !important;
+    white-space: normal !important;
+    word-break: break-word;
+  }
+  .ice-context-menu {
+    border-radius: 12px !important;
+    border: 1px solid rgba(148, 163, 184, 0.24) !important;
+    box-shadow: 0 16px 34px rgba(2, 6, 23, 0.22) !important;
+    backdrop-filter: blur(12px);
+    overflow: hidden;
+  }
+  .ice-context-menu .q-list {
+    background: rgba(255, 255, 255, 0.96);
+    padding: 4px !important;
+    min-width: 170px;
+  }
+  .ice-context-item {
+    border-radius: 8px;
+    min-height: 34px !important;
+    font-size: 12px;
+    color: #334155;
+    transition: all 0.2s ease;
+  }
+  .ice-context-item:hover {
+    background: linear-gradient(90deg, rgba(6,182,212,0.14) 0%, rgba(34,211,238,0.10) 100%) !important;
+    color: #0f172a !important;
   }
   .ice-btn-terminate {
     padding: 4px 12px;
@@ -862,8 +936,9 @@ class StrategyParser:
                 filename_set.add(full_filename)
 
             # 解析 root_layers 路径为 root_ids
+            root_layers = [path for path in p.get('root_layers', []) if isinstance(path, str) and path.strip()]
             root_ids = []
-            for path in p.get('root_layers', []):
+            for path in root_layers:
                 rid, _, _ = resolve(path)
                 if rid: root_ids.append(rid)
 
@@ -875,6 +950,7 @@ class StrategyParser:
                 "format": p['format'],
                 "quality": p.get('quality', 100),
                 "root_ids": root_ids, # 插件端需要数字 ID
+                "root_layers": root_layers, # 持久化路径，供反序列化还原勾选
                 "tiling": p.get('tiling', {"enabled": False}),
                 "filters": state.global_filter_steps if state.global_filter_active else []
             }
@@ -932,6 +1008,17 @@ class StrategyLoader:
     @staticmethod
     def deserialize(data, state, current_layer_tree):
         state.reset()
+
+        # 兼容历史策略：当仅保存了 root_ids 时，尽量还原回 root_layers 路径
+        id_to_path = {}
+        def _walk(nodes):
+            for node in nodes or []:
+                node_id = node.get('id')
+                node_path = node.get('path')
+                if node_id is not None and node_path:
+                    id_to_path[node_id] = node_path
+                _walk(node.get('children', []))
+        _walk(current_layer_tree or [])
         
         ops = data.get('operations', [])
         text_ops = [op for op in ops if op['type'] == 'update_text_layer']
@@ -1002,12 +1089,33 @@ class StrategyLoader:
                 state.global_filter_active = True
             
             for r in data['renders']:
+                root_layers = r.get('root_layers', [])
+                if not root_layers and r.get('root_ids'):
+                    root_layers = [id_to_path.get(rid) for rid in r.get('root_ids', []) if id_to_path.get(rid)]
+
+                raw_tiling = r.get('tiling', {"enabled": False})
+                if isinstance(raw_tiling, dict):
+                    tiling = {
+                        "enabled": bool(raw_tiling.get("enabled", False)),
+                        "width": int(raw_tiling.get("width", 1920) or 1920),
+                        "height": int(raw_tiling.get("height", 1080) or 1080),
+                        "ppi": int(raw_tiling.get("ppi", 300) or 300),
+                    }
+                else:
+                    # 兼容执行态结构：tiling(bool) + width/height/resolution
+                    tiling = {
+                        "enabled": bool(raw_tiling),
+                        "width": int(r.get("width", 1920) or 1920),
+                        "height": int(r.get("height", 1080) or 1080),
+                        "ppi": int(r.get("resolution", 300) or 300),
+                    }
+
                 preset = {
                     "name": r['name'],
                     "filename": r['filename'],
                     "format": r['format'],
-                    "root_layers": r.get('root_layers', []),
-                    "tiling": r.get('tiling', {"enabled": False}),
+                    "root_layers": root_layers,
+                    "tiling": tiling,
                     "output_path": r.get('output_path', './output'),
                     "quality": r.get('quality', 100)
                 }
@@ -1851,11 +1959,13 @@ class RapidExportPanel:
                         # 4. 导出位置
                         with ui.column().classes('w-full gap-2'):
                             ui.label('导出位置').classes('text-[10px] font-bold text-slate-400 uppercase tracking-widest')
-                            with ui.row().classes('w-full items-start gap-2 bg-slate-50 rounded-xl p-2 border border-slate-100 overflow-hidden'):
-                                # 路径区域：禁止横向溢出，长路径自动换行，占用剩余宽度
-                                with ui.element('div').classes('flex-grow overflow-hidden min-w-0'):
+                            with ui.element('div').classes('w-full relative bg-slate-50 rounded-xl p-2 border border-slate-100 overflow-hidden min-h-[52px]'):
+                                # 路径区域：预留右下角图标空间，长路径自动换行
+                                with ui.element('div').classes('pr-7 overflow-hidden min-w-0'):
                                     self.export_path_label = ui.label(self.export_path).classes('text-[10px] text-slate-500 px-1 font-mono break-all leading-relaxed')
-                                ui.icon('folder_open').classes('text-sm text-slate-400 cursor-pointer hover:text-cyan-600 shrink-0 self-center').on('click', self._pick_export_path)
+                                ui.icon('folder_open') \
+                                    .classes('text-sm text-slate-400 cursor-pointer hover:text-cyan-600 absolute right-2 bottom-2') \
+                                    .on('click', self._pick_export_path)
 
                         # 5. 渲染完成后动作
                         with ui.row().classes('w-full items-center justify-between'):
@@ -1880,7 +1990,7 @@ class RapidExportPanel:
                         self.progress_bar = ui.element('div').classes('h-full bg-cyan-500 ice-shimmer-bar').style('width: 0%')
 
                     # 渲染列表
-                    self.render_list_container = ui.column().classes('w-full gap-2 max-h-32 overflow-y-auto')
+                    self.render_list_container = ui.column().classes('w-full gap-1 max-h-44 overflow-y-auto pr-1')
 
     def _on_clipboard_switch_change(self, e):
         # 未登录时不允许开启，避免启动阶段误触发提示
@@ -2150,8 +2260,8 @@ class RapidExportPanel:
                     cells = normalized[:total_vars]
                     if len(cells) < total_vars:
                         cells.extend([''] * (total_vars - len(cells)))
-                    # 表格场景允许空值和列数不匹配（自动补齐/截断），仅按“整行为空”可选过滤
-                    if filter_empty_value and not any(cells):
+                    # 过滤空项开启时：只要期望参数里有任意空值就跳过
+                    if filter_empty_value and any(cell == "" for cell in cells):
                         invalid_count += 1
                         continue
                     candidates.append({
@@ -2212,7 +2322,7 @@ class RapidExportPanel:
                         def render_list():
                             list_inner.clear()
                             candidates, invalid_count = build_preview_candidates(preview_ignore_header.value, preview_filter_empty.value)
-                            status_label.set_text(f'已识别 {len(candidates)} 条，忽略空行 {invalid_count} 条')
+                            status_label.set_text(f'已识别 {len(candidates)} 条，因空项跳过 {invalid_count} 条')
 
                             for item in candidates:
                                 if item['source_idx'] not in selected_rows:
@@ -2326,7 +2436,7 @@ class RapidExportPanel:
                 ui.notify(f"导出路径已更新: {path}", type='positive')
                 return
         except Exception:
-            ui.notify("当前环境不支持路径选择器，请手动在 config.json 中修改 rapid_export.export_path", type='warning')
+            pass
 
     def _pick_table_file(self):
         """打开文件选择器解析表格"""
@@ -2350,8 +2460,10 @@ class RapidExportPanel:
         if not self.clipboard_monitor_active or self.is_running or not win32clipboard:
             return
         
+        clipboard_opened = False
         try:
             win32clipboard.OpenClipboard()
+            clipboard_opened = True
             # 仅在包含文本格式时尝试嗅探，防止与图片复制冲突
             if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
                 data = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
@@ -2362,9 +2474,14 @@ class RapidExportPanel:
                     lines = [line.strip() for line in clean_data.split('\n') if line.strip()]
                     if lines:
                         self.add_to_queue(lines, source="剪贴板嗅探")
-            win32clipboard.CloseClipboard()
         except Exception:
             pass
+        finally:
+            if clipboard_opened:
+                try:
+                    win32clipboard.CloseClipboard()
+                except Exception:
+                    pass
 
     def _get_active_group_counts(self):
         """计算策略中实际使用的变量组数量 (与 StrategyParser 逻辑保持一致)"""
@@ -2451,24 +2568,21 @@ class RapidExportPanel:
         filename_template = "output_{index}"
         if self.strategy_snapshot and self.strategy_snapshot.get('renders', []):
             filename_template = self.strategy_snapshot['renders'][0].get('filename', "output_{index}")
+        elif template_state.render_presets:
+            filename_template = template_state.render_presets[0].get('filename', "output_{index}")
         
         start_idx = len(self.task_history)
         for i, task_data in enumerate(valid_tasks):
             # 为每个任务生成可读的“文件名”/标识（用前两个字段拼接）
             display_name = ' '.join(str(x) for x in task_data[:2])
             # 用模板生成预期输出文件名
-            output_name = filename_template
-            for j, val in enumerate(task_data):
-                output_name = output_name.replace(f'{{文字组 {j+1}}}', str(val))
-            doc_name = os.path.splitext(template_state.current_doc or "template")[0]
-            output_name = output_name.replace('{模板名}', doc_name)
-            output_name = output_name.replace('{时间}', datetime.datetime.now().strftime('%m%d%H%M'))
-            output_name = re.sub(r'[\/:*?"<>|]', '_', output_name)
+            output_name = self._parse_filename(filename_template, task_data, start_idx + i + 1)
             self.task_history.append({
                 'index': start_idx + i + 1,
                 'data': task_data,
                 'display_name': display_name,
                 'output_name': output_name,
+                'output_path': None,
                 'status': 'waiting',  # waiting / running / success / failed
                 'error': None
             })
@@ -2539,8 +2653,15 @@ class RapidExportPanel:
                     # 克隆渲染预设并覆盖必要字段
                     render_item = copy.deepcopy(r_preset)
                     render_item['folder'] = os.path.abspath(self.export_path)
+                    tiling_cfg = render_item.get('tiling', {})
+                    if isinstance(tiling_cfg, dict):
+                        render_item['tiling'] = bool(tiling_cfg.get('enabled', False))
+                        render_item['width'] = int(tiling_cfg.get('width', 0) or 0)
+                        render_item['height'] = int(tiling_cfg.get('height', 0) or 0)
+                        render_item['resolution'] = int(tiling_cfg.get('ppi', 300) or 300)
                     # 简单文件名替换逻辑 (占位符支持)
-                    final_name = self._parse_filename(render_item['filename'], task_data)
+                    task_index_for_name = self.task_history[current_task_idx]['index'] if current_task_idx is not None and current_task_idx < len(self.task_history) else self.processed_count
+                    final_name = self._parse_filename(render_item['filename'], task_data, task_index_for_name)
                     render_item['file_name'] = final_name
                     renders.append(render_item)
 
@@ -2558,21 +2679,29 @@ class RapidExportPanel:
                 )
                 
                 success, err = await fut
+                result_status = success.get('status') if isinstance(success, dict) else None
                 rendered_files = success.get('rendered_files', []) if isinstance(success, dict) else []
-                file_errors = [r.get('error') for r in rendered_files if r.get('status') != 'success']
-                atomic_failed = bool(err) or (not success) or bool(file_errors)
-                
+                file_errors = [r.get('error') for r in rendered_files if str(r.get('status', '')).lower() not in ('success', 'ok')]
+                status_failed = (result_status is not None and str(result_status).lower() not in ('success', 'ok'))
+                atomic_failed = bool(err) or (not success) or status_failed or bool(file_errors)
+
                 # 更新 task_history 中的任务状态
                 if current_task_idx is not None:
                     if atomic_failed:
                         self.task_history[current_task_idx]['status'] = 'failed'
                         first_file_error = next((str(e) for e in file_errors if e), None)
-                        self.task_history[current_task_idx]['error'] = str(err) if err else (first_file_error or "渲染失败")
+                        status_error = None if not status_failed else f"返回状态: {result_status}"
+                        self.task_history[current_task_idx]['error'] = str(err) if err else (first_file_error or status_error or "渲染失败")
                     else:
                         self.task_history[current_task_idx]['status'] = 'success'
-                        first_success_name = next((r.get('name') for r in rendered_files if r.get('status') == 'success' and r.get('name')), None)
-                        if first_success_name:
-                            self.task_history[current_task_idx]['output_name'] = str(first_success_name)
+                        first_success_file = next((r for r in rendered_files if str(r.get('status', '')).lower() in ('success', 'ok')), None)
+                        if first_success_file:
+                            resolved_path = self._resolve_rendered_file_path(first_success_file)
+                            if resolved_path:
+                                self.task_history[current_task_idx]['output_name'] = os.path.basename(resolved_path)
+                                self.task_history[current_task_idx]['output_path'] = resolved_path
+                            elif first_success_file.get('name'):
+                                self.task_history[current_task_idx]['output_name'] = str(first_success_file.get('name'))
                 
                 # 更新列表 UI 状态
                 self._update_render_list_ui()
@@ -2580,10 +2709,11 @@ class RapidExportPanel:
                 # 如果开启了复制到剪贴板，寻找第一个成功的渲染文件并复制其内容
                 if (not atomic_failed) and self.copy_after_render:
                     for r_res in rendered_files:
-                        if r_res.get('status') == 'success':
-                            file_path = os.path.abspath(os.path.join(self.export_path, r_res['name']))
-                            self._copy_image_to_clipboard(file_path)
-                            break
+                        if str(r_res.get('status', '')).lower() in ('success', 'ok'):
+                            file_path = self._resolve_rendered_file_path(r_res)
+                            if file_path:
+                                self._copy_image_to_clipboard(file_path)
+                                break
 
         except Exception as e:
             ui.notify(f"任务循环异常: {e}", type='negative')
@@ -2619,19 +2749,121 @@ class RapidExportPanel:
             ops.append(new_op)
         return ops
 
-    def _parse_filename(self, template, task_data):
+    def _parse_filename(self, template, task_data, task_index=None):
         """解析文件名模板"""
-        # 简单替换 {文字组 X}
-        res = template
-        for i, val in enumerate(task_data):
+        res = str(template or "output_{index}")
+        text_vars, img_vars = self._get_active_group_counts()
+        text_data = task_data[:text_vars]
+        img_data = task_data[text_vars:text_vars + img_vars]
+
+        for i, val in enumerate(text_data):
             res = res.replace(f'{{文字组 {i+1}}}', str(val))
-        
+        for i, val in enumerate(img_data):
+            res = res.replace(f'{{图片组 {i+1}}}', str(val))
+
+        index_value = task_index if task_index is not None else (len(self.task_history) + 1)
+        res = res.replace('{index}', str(index_value))
         doc_name = os.path.splitext(template_state.current_doc or "template")[0]
         res = res.replace('{模板名}', doc_name)
         res = res.replace('{时间}', datetime.datetime.now().strftime('%m%d%H%M'))
         # 移除非法字符
         res = re.sub(r'[\/:*?"<>|]', '_', res)
+        # 若占位符仍未替换，回退到稳态文件名，避免显示为模板占位字符串
+        if '{' in res or '}' in res:
+            res = f"{doc_name}_{datetime.datetime.now().strftime('%m%d%H%M')}_{index_value}"
+        if not res.strip():
+            res = f"output_{index_value}"
         return res
+
+    def _resolve_rendered_file_path(self, render_result):
+        """从渲染结果中尽可能解析出真实文件路径。"""
+        if not isinstance(render_result, dict):
+            return None
+
+        raw_path = render_result.get('path')
+        if raw_path:
+            normalized = os.path.abspath(os.path.normpath(str(raw_path)))
+            if os.path.exists(normalized):
+                return normalized
+
+        name = str(render_result.get('name') or '').strip()
+        if not name:
+            return None
+
+        # 1) name 本身是绝对路径
+        if os.path.isabs(name) and os.path.exists(name):
+            return os.path.abspath(os.path.normpath(name))
+
+        # 2) 导出目录 + name
+        joined = os.path.abspath(os.path.join(self.export_path, name))
+        if os.path.exists(joined):
+            return joined
+
+        # 3) name 可能不带扩展名，尝试 name.*
+        base, ext = os.path.splitext(name)
+        if not ext:
+            pattern = os.path.join(os.path.abspath(self.export_path), f"{name}.*")
+            matches = sorted(glob.glob(pattern), key=lambda p: os.path.getmtime(p), reverse=True)
+            if matches:
+                return os.path.abspath(matches[0])
+
+            if base:
+                pattern2 = os.path.join(os.path.abspath(self.export_path), f"{base}.*")
+                matches2 = sorted(glob.glob(pattern2), key=lambda p: os.path.getmtime(p), reverse=True)
+                if matches2:
+                    return os.path.abspath(matches2[0])
+
+        return None
+
+    def _resolve_task_output_path(self, task):
+        direct = task.get('output_path')
+        if direct:
+            normalized = os.path.abspath(os.path.normpath(str(direct)))
+            if os.path.exists(normalized):
+                return normalized
+        return self._resolve_rendered_file_path({
+            'path': task.get('output_path'),
+            'name': task.get('output_name'),
+        })
+
+    def _open_task_output(self, task):
+        path = self._resolve_task_output_path(task)
+        if not path:
+            with self.container:
+                ui.notify("找不到输出文件，请先确认任务成功且文件已存在", type='warning')
+            return
+        try:
+            os.startfile(path)
+        except Exception:
+            try:
+                webbrowser.open(f"file:///{path.replace(os.sep, '/')}")
+            except Exception as e:
+                with self.container:
+                    ui.notify(f"打开文件失败: {e}", type='negative')
+
+    def _open_task_output_folder(self, task):
+        path = self._resolve_task_output_path(task)
+        folder = os.path.dirname(path) if path else os.path.abspath(self.export_path)
+        if not os.path.exists(folder):
+            with self.container:
+                ui.notify("输出目录不存在", type='warning')
+            return
+        try:
+            os.startfile(folder)
+        except Exception:
+            try:
+                webbrowser.open(f"file:///{folder.replace(os.sep, '/')}")
+            except Exception as e:
+                with self.container:
+                    ui.notify(f"打开目录失败: {e}", type='negative')
+
+    def _copy_task_output_to_clipboard(self, task):
+        path = self._resolve_task_output_path(task)
+        if not path:
+            with self.container:
+                ui.notify("找不到输出文件，无法复制到剪贴板", type='warning')
+            return
+        self._copy_image_to_clipboard(path)
 
     def _copy_image_to_clipboard(self, file_path):
         """将生成的图片文件内容复制到剪贴板 (仅限 Windows)"""
@@ -2673,7 +2905,12 @@ class RapidExportPanel:
                     try:
                         win32clipboard.EmptyClipboard()
                         win32clipboard.SetClipboardData(win32clipboard.CF_DIB, dib_data)
-                        ui.notify("已将渲染结果复制到剪贴板", type='positive')
+                        try:
+                            with self.container:
+                                ui.notify("已将渲染结果复制到剪贴板", type='positive')
+                        except Exception:
+                            # 通知失败不应影响复制结果
+                            pass
                         break
                     finally:
                         win32clipboard.CloseClipboard()
@@ -2716,85 +2953,45 @@ class RapidExportPanel:
             self.progress_label.set_text(f"已中止 (剩余 {len(self.queue)} 条)")
 
     def _update_render_list_ui(self, current_task_info=None):
-        """保持渲染列表只显示最近三条：1条已完成, 1条进行中, 1条等待中"""
+        """渲染全量任务历史：可滚动，每条任务固定单行。"""
         self.render_list_container.clear()
         with self.render_list_container:
-            # 1. 从 task_history 中找出上一张、正在执行、下一个的任务
-            last_completed_task = None
-            running_task = None
-            next_waiting_task = None
+            if not self.task_history:
+                with ui.row().classes('ice-history-row opacity-60'):
+                    ui.element('div').classes('ice-history-dot ice-history-dot-waiting')
+                    ui.label('暂无任务').classes('text-[10px] text-slate-400 truncate flex-grow')
+                return
 
-            # 从后往前找最近一个已完成的
-            for t in reversed(self.task_history):
-                if t['status'] == 'success' or t['status'] == 'failed':
-                    last_completed_task = t
-                    break
+            for task in self.task_history:
+                status = task.get('status', 'waiting')
+                status_to_class = {
+                    'waiting': 'ice-history-dot-waiting',
+                    'running': 'ice-history-dot-running',
+                    'success': 'ice-history-dot-success',
+                    'failed': 'ice-history-dot-failed',
+                }
+                text_to_class = {
+                    'waiting': 'text-slate-500',
+                    'running': 'text-cyan-600',
+                    'success': 'text-emerald-600',
+                    'failed': 'text-red-500',
+                }
 
-            # 找正在执行的
-            for t in self.task_history:
-                if t['status'] == 'running':
-                    running_task = t
-                    break
-
-            # 找第一个等待的
-            for t in self.task_history:
-                if t['status'] == 'waiting':
-                    next_waiting_task = t
-                    break
-
-            # --- 第一行：上一张（已完成/失败）---
-            if last_completed_task:
-                status = last_completed_task['status']
-                if status == 'success':
-                    icon_html = '''<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'''
-                    text_color = 'text-emerald-600'
-                    row_classes = 'w-full items-center gap-2 opacity-70'
-                else:
-                    icon_html = '''<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 18L18 6M6 6l12 12" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/></svg>'''
-                    text_color = 'text-red-500'
-                    row_classes = 'w-full items-center gap-2 opacity-70'
-                with ui.row().classes(row_classes):
-                    ui.html(icon_html, sanitize=False)
-                    display_name = last_completed_task.get('output_name', last_completed_task['display_name'])
-                    ui.label(f"[{last_completed_task['index']:02d}] {display_name}").classes(f'text-[10px] {text_color} truncate flex-grow')
-            else:
-                # 没有上一张时留空占位
-                with ui.row().classes('w-full items-center gap-2 opacity-0'):
-                    ui.icon('schedule', color='slate-300').classes('text-[14px]')
-                    ui.label('').classes('text-[10px] text-slate-400 truncate flex-grow')
-            
-            # --- 第二行：正在执行 ---
-            if running_task:
-                icon_html = '''<svg class="status-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"/></svg>'''
-                text_color = 'text-cyan-600'
-                with ui.row().classes('w-full items-center gap-2'):
-                    ui.html(icon_html, sanitize=False)
-                    display_name = running_task.get('output_name', running_task['display_name'])
-                    ui.label(f"[{running_task['index']:02d}] {display_name}").classes(f'text-[10px] {text_color} truncate flex-grow')
-            elif not self.is_running and not self.queue and last_completed_task:
-                # 全部完成的情况：第二行显示“全部完成”
-                with ui.row().classes('w-full items-center gap-2'):
-                    ui.icon('check_circle', color='emerald-500').classes('text-[14px]')
-                    ui.label(f'全部完成').classes('text-[10px] text-emerald-600 truncate flex-grow')
-            else:
-                # 没有正在执行时留空占位
-                with ui.row().classes('w-full items-center gap-2 opacity-0'):
-                    ui.icon('schedule', color='slate-300').classes('text-[14px]')
-                    ui.label('').classes('text-[10px] text-slate-400 truncate flex-grow')
-
-            # --- 第三行：下一个（等待中）---
-            if next_waiting_task:
-                icon_html = '''<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'''
-                text_color = 'text-slate-400'
-                with ui.row().classes('w-full items-center gap-2 opacity-50'):
-                    ui.html(icon_html, sanitize=False)
-                    display_name = next_waiting_task.get('output_name', next_waiting_task['display_name'])
-                    ui.label(f"[{next_waiting_task['index']:02d}] {display_name}").classes(f'text-[10px] {text_color} truncate flex-grow')
-            else:
-                # 没有下一个时留空占位
-                with ui.row().classes('w-full items-center gap-2 opacity-0'):
-                    ui.icon('schedule', color='slate-300').classes('text-[14px]')
-                    ui.label('').classes('text-[10px] text-slate-400 truncate flex-grow')
+                display_name = task.get('output_name') or task.get('display_name', '未命名任务')
+                with ui.row().classes('ice-history-row'):
+                    ui.element('div').classes(f"ice-history-dot {status_to_class.get(status, 'ice-history-dot-waiting')}")
+                    ui.label(f"[{task.get('index', 0):03d}] {display_name}") \
+                        .classes(f"text-[10px] {text_to_class.get(status, 'text-slate-500')} truncate flex-grow whitespace-nowrap overflow-hidden")
+                    if status == 'success':
+                        with ui.context_menu().classes('ice-context-menu'):
+                            ui.menu_item('打开文件', on_click=lambda t=task: self._open_task_output(t)).classes('ice-context-item')
+                            ui.menu_item('打开所在目录', on_click=lambda t=task: self._open_task_output_folder(t)).classes('ice-context-item')
+                            ui.menu_item('复制到剪贴板', on_click=lambda t=task: self._copy_task_output_to_clipboard(t)).classes('ice-context-item')
+                    if status == 'failed':
+                        err_text = task.get('error') or '任务失败'
+                        with ui.element('div').classes('ice-history-error-pill'):
+                            ui.label('i').classes('text-[9px] leading-none')
+                            ui.tooltip(err_text).classes('ice-error-tooltip')
 
     def _update_terminate_btn_state(self):
         """终止按钮仅在队列仍有剩余任务时可用。"""
@@ -2813,14 +3010,18 @@ class RapidExportPanel:
             return
         
         async def do_terminate():
-            confirmed = await show_confirm_dialog(
-                title='终止任务？',
-                message='将清除后续排队任务，当前正在渲染的任务会尝试完成。确定继续吗？',
-                confirm_text='清除排队',
-                cancel_text='继续渲染',
-                icon_type='warning'
-            )
+            # create_task 会丢失当前 slot，上下文需显式绑定到面板容器
+            with self.container:
+                confirmed = await show_confirm_dialog(
+                    title='终止任务？',
+                    message='将清除后续排队任务，当前正在渲染的任务会尝试完成。确定继续吗？',
+                    confirm_text='清除排队',
+                    cancel_text='继续渲染',
+                    icon_type='warning'
+                )
             if confirmed:
+                # 仅保留已执行/执行中的记录，移除被终止后未开始的 waiting 任务
+                self.task_history = [t for t in self.task_history if t.get('status') != 'waiting']
                 self.queue.clear()
                 # 调整总数为“已处理到当前”为止，让进度更合理
                 if self.processed_count > 0:
